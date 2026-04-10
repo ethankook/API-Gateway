@@ -24,12 +24,18 @@
   </properties>
 
   <modules>
+    <module>common</module>
     <module>gateway</module>
     <module>scheduler</module>
   </modules>
 
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>com</groupId>
+        <artifactId>common</artifactId>
+        <version>${project.version}</version>
+      </dependency>
       <dependency>
         <groupId>org.junit.jupiter</groupId>
         <artifactId>junit-jupiter</artifactId>
