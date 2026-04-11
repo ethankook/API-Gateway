@@ -12,6 +12,7 @@ public class RouteResolver {
     private final GatewayProperties gatewayProperties;
 
     public Route resolve(String path) {
+        log.info("Resolving route for {}", path);
         if (path == null || path.isBlank()) {
             log.warn("Path is null or blank");
             return null;
@@ -39,7 +40,7 @@ public class RouteResolver {
             }
         }
 
-        log.debug("Resolved route {} for {}", bestMatch, path);
+        log.info("Resolved route {} for {}", bestMatch, path);
         return bestMatch;
     }
 }
