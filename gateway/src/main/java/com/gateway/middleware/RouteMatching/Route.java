@@ -1,4 +1,4 @@
-package com.gateway.config;
+package com.gateway.middleware.RouteMatching;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -7,7 +7,7 @@ import java.util.List;
 
 @Getter
 @Setter
-public class RouteConfig {
+public class Route {
     String routeId;
     String pathPrefix;
     String downstreamUrl;
