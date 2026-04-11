@@ -1,6 +1,6 @@
 package com.gateway.middleware.RouteMatching;
 
-import tools.jackson.core.JsonProcessingException;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -39,7 +39,7 @@ public class RouteMatchingFilter extends OncePerRequestFilter {
                                 java.util.Map.of("error", "No route found for path: " + path)
                         )
                 );
-            } catch (JsonProcessingException ex) {
+            } catch (JacksonException ex) {
                 throw new ServletException("Failed to serialize route-matching error response", ex);
             }
             return;
