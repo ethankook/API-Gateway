@@ -1,8 +1,11 @@
 package com.gateway;
 
+import com.gateway.config.GatewayProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
+@EnableConfigurationProperties(GatewayProperties.class)
 @SpringBootApplication
 public class GatewayApplication {
 
