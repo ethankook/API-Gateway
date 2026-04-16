@@ -24,6 +24,7 @@
     <jackson-bom.version>3.1.1</jackson-bom.version>
     <jacoco.version>0.8.14</jacoco.version>
     <mockito.version>5.20.0</mockito.version>
+    <okhttp.version>4.12.0</okhttp.version>
   </properties>
 
   <modules>

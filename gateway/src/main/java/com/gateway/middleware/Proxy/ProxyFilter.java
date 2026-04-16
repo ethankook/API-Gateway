@@ -24,16 +24,17 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Enumeration;
 import java.util.Set;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 @RequiredArgsConstructor
 @Order(FilterOrder.PROXY)
 @Component("gatewayProxyFilter")
-public class ProxyFilter extends OncePerRequestFilter{
+public class ProxyFilter extends OncePerRequestFilter {
 
     private final WebClient webClient;
     private final GatewayProperties properties;
-    Set<String> excluded = Set.of(
+    private final Set<String> excluded = Set.of(
             "host",
             "content-length"
     );
@@ -56,7 +57,8 @@ public class ProxyFilter extends OncePerRequestFilter{
         byte[] body = hasBody(request) ? request.getInputStream().readAllBytes() : null;
 
         HttpHeaders headers = buildForwardHeaders(request);
-        log.info("Proxying {} {} -> {}", request.getMethod(), request.getRequestURI(), downstreamUrl);
+        String requestId = requestId(request);
+        log.info("Proxying requestId={} {} {} -> {}", requestId, request.getMethod(), request.getRequestURI(), downstreamUrl);
 
         try {
             ResponseEntity<byte[]> downstreamResponse = webClient
@@ -83,13 +85,22 @@ public class ProxyFilter extends OncePerRequestFilter{
                 response.getOutputStream().write(responseBody);
             }
             log.info(
-                    "Proxy response {} {} <- {}",
+                    "Proxy response requestId={} {} {} <- {}",
+                    requestId,
                     request.getMethod(),
                     request.getRequestURI(),
                     downstreamResponse.getStatusCode().value());
         } catch (IllegalStateException e) {
+            log.warn("Proxy timeout requestId={} {} {}", requestId, request.getMethod(), request.getRequestURI(), e);
             writeError(response, 504, "Server timeout", request);
         } catch (WebClientRequestException e) {
+            if (isTimeoutException(e)) {
+                log.warn("Proxy timeout requestId={} {} {}", requestId, request.getMethod(), request.getRequestURI(), e);
+                writeError(response, 504, "Server timeout", request);
+                return;
+            }
+
+            log.warn("Proxy downstream unavailable requestId={} {} {}", requestId, request.getMethod(), request.getRequestURI(), e);
             writeError(response, 502, "Service unavailable", request);
         }
     }
@@ -115,13 +126,35 @@ public class ProxyFilter extends OncePerRequestFilter{
         return headers;
     }
 
-    private void writeError(HttpServletResponse response, int status, String message, HttpServletRequest request) throws IOException {
+    private boolean isTimeoutException(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof TimeoutException) {
+                return true;
+            }
+
+            String simpleName = current.getClass().getSimpleName();
+            if ("ReadTimeoutException".equals(simpleName) || "TimeoutException".equals(simpleName)) {
+                return true;
+            }
+
+            current = current.getCause();
+        }
+
+        return false;
+    }
+
+    private String requestId(HttpServletRequest request) {
         String requestId = (String) request.getAttribute("requestId");
+        return requestId != null ? requestId : "unknown";
+    }
+
+    private void writeError(HttpServletResponse response, int status, String message, HttpServletRequest request) throws IOException {
         response.setStatus(status);
         response.setContentType("application/json");
         response.getWriter().write(String.format(
                 "{\"error\":\"%s\",\"status\":%d,\"requestId\":\"%s\"}",
-                message, status, requestId != null ? requestId : "unknown"
+                message, status, requestId(request)
         ));
     }
 
