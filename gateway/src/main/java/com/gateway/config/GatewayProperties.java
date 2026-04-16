@@ -11,4 +11,8 @@ import lombok.Setter;
 public class GatewayProperties {
 
     private Route[] routes;
+
+    private Integer connectTimeoutMs;
+    private Integer readTimeoutMs;
+
 }

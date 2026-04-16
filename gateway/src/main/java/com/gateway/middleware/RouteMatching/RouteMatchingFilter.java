@@ -16,7 +16,7 @@ import java.io.IOException;
 import static com.gateway.config.FilterOrder.ROUTE_MATCHING;
 
 @Order(ROUTE_MATCHING)
-@Component
+@Component("gatewayRouteMatchingFilter")
 @RequiredArgsConstructor
 public class RouteMatchingFilter extends OncePerRequestFilter {
 
@@ -44,8 +44,8 @@ public class RouteMatchingFilter extends OncePerRequestFilter {
             }
             return;
         }
-
         request.setAttribute("matchedRoute", route);
+
         filterChain.doFilter(request, response);
     }
 }
