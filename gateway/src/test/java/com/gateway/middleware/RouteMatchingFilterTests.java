@@ -8,7 +8,6 @@ import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import tools.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.mockito.Mockito.doAnswer;
@@ -25,8 +24,7 @@ public class RouteMatchingFilterTests {
         route.setPathPrefix("/api/v1/leagues");
         properties.setRoutes(new Route[] {route});
 
-        RouteMatchingFilter filter =
-                new RouteMatchingFilter(new ObjectMapper(), new RouteResolver(properties));
+        RouteMatchingFilter filter = new RouteMatchingFilter(new RouteResolver(properties));
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/leagues/42");
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain chain = mock(FilterChain.class);
@@ -41,5 +39,23 @@ public class RouteMatchingFilterTests {
 
         verify(chain).doFilter(request, response);
         assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void returnsSharedJsonErrorWhenRouteIsMissing() throws Exception {
+        GatewayProperties properties = new GatewayProperties();
+        properties.setRoutes(new Route[0]);
+
+        RouteMatchingFilter filter = new RouteMatchingFilter(new RouteResolver(properties));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/missing");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, mock(FilterChain.class));
+
+        assertThat(response.getStatus()).isEqualTo(404);
+        assertThat(response.getContentType()).isEqualTo("application/json");
+        assertThat(response.getContentAsString()).contains("\"error\":\"No route found for path: /missing\"");
+        assertThat(response.getContentAsString()).contains("\"status\":404");
+        assertThat(response.getContentAsString()).contains("\"requestId\":\"unknown\"");
     }
 }

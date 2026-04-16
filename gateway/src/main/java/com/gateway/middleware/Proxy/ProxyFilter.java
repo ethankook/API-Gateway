@@ -2,6 +2,7 @@ package com.gateway.middleware.Proxy;
 
 import com.gateway.config.FilterOrder;
 import com.gateway.config.GatewayProperties;
+import com.gateway.middleware.FilterErrorResponseWriter;
 import com.gateway.middleware.RouteMatching.Route;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -57,7 +58,7 @@ public class ProxyFilter extends OncePerRequestFilter {
         byte[] body = hasBody(request) ? request.getInputStream().readAllBytes() : null;
 
         HttpHeaders headers = buildForwardHeaders(request);
-        String requestId = requestId(request);
+        String requestId = FilterErrorResponseWriter.requestId(request);
         log.info("Proxying requestId={} {} {} -> {}", requestId, request.getMethod(), request.getRequestURI(), downstreamUrl);
 
         try {
@@ -72,7 +73,7 @@ public class ProxyFilter extends OncePerRequestFilter {
                     .block(Duration.ofMillis(properties.getReadTimeoutMs()));
 
             if (downstreamResponse == null) {
-                writeError(response, 502, "No response from downstream service", request);
+                FilterErrorResponseWriter.writeError(response, HttpServletResponse.SC_BAD_GATEWAY, "No response from downstream service", request);
                 return;
             }
 
@@ -92,16 +93,16 @@ public class ProxyFilter extends OncePerRequestFilter {
                     downstreamResponse.getStatusCode().value());
         } catch (IllegalStateException e) {
             log.warn("Proxy timeout requestId={} {} {}", requestId, request.getMethod(), request.getRequestURI(), e);
-            writeError(response, 504, "Server timeout", request);
+            FilterErrorResponseWriter.writeError(response, HttpServletResponse.SC_GATEWAY_TIMEOUT, "Server timeout", request);
         } catch (WebClientRequestException e) {
             if (isTimeoutException(e)) {
                 log.warn("Proxy timeout requestId={} {} {}", requestId, request.getMethod(), request.getRequestURI(), e);
-                writeError(response, 504, "Server timeout", request);
+                FilterErrorResponseWriter.writeError(response,  HttpServletResponse.SC_GATEWAY_TIMEOUT, "Server timeout", request);
                 return;
             }
 
             log.warn("Proxy downstream unavailable requestId={} {} {}", requestId, request.getMethod(), request.getRequestURI(), e);
-            writeError(response, 502, "Service unavailable", request);
+            FilterErrorResponseWriter.writeError(response,  HttpServletResponse.SC_BAD_GATEWAY, "Service unavailable", request);
         }
     }
 
@@ -142,20 +143,6 @@ public class ProxyFilter extends OncePerRequestFilter {
         }
 
         return false;
-    }
-
-    private String requestId(HttpServletRequest request) {
-        String requestId = (String) request.getAttribute("requestId");
-        return requestId != null ? requestId : "unknown";
-    }
-
-    private void writeError(HttpServletResponse response, int status, String message, HttpServletRequest request) throws IOException {
-        response.setStatus(status);
-        response.setContentType("application/json");
-        response.getWriter().write(String.format(
-                "{\"error\":\"%s\",\"status\":%d,\"requestId\":\"%s\"}",
-                message, status, requestId(request)
-        ));
     }
 
 }

@@ -1,7 +1,6 @@
 package com.gateway.middleware.RouteMatching;
 
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
+import com.gateway.middleware.FilterErrorResponseWriter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,7 +19,6 @@ import static com.gateway.config.FilterOrder.ROUTE_MATCHING;
 @RequiredArgsConstructor
 public class RouteMatchingFilter extends OncePerRequestFilter {
 
-    private final ObjectMapper objectMapper;
     private final RouteResolver routeResolver;
 
     @Override
@@ -31,17 +29,12 @@ public class RouteMatchingFilter extends OncePerRequestFilter {
         Route route = routeResolver.resolve(path);
 
         if (route == null) {
-            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-            response.setContentType("application/json");
-            try {
-                response.getWriter().write(
-                        objectMapper.writeValueAsString(
-                                java.util.Map.of("error", "No route found for path: " + path)
-                        )
-                );
-            } catch (JacksonException ex) {
-                throw new ServletException("Failed to serialize route-matching error response", ex);
-            }
+            FilterErrorResponseWriter.writeError(
+                    response,
+                    HttpServletResponse.SC_NOT_FOUND,
+                    "No route found for path: " + path,
+                    request
+            );
             return;
         }
         request.setAttribute("matchedRoute", route);
