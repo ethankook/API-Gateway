@@ -61,6 +61,17 @@ public class RequestContextTests {
   }
 
   @Test
+  void filterInitializesLifecycleAttributes() throws Exception {
+    filter.doFilter(request, response, chain);
+
+    assertThat(request.getAttribute("authResult")).isEqualTo("skipped");
+    assertThat(request.getAttribute("rateLimitResult")).isEqualTo("skipped");
+    assertThat(request.getAttribute("downstreamUrl")).isNull();
+    assertThat(request.getAttribute("downstreamStatus")).isNull();
+    assertThat(request.getAttribute("downstreamLatencyMs")).isNull();
+  }
+
+  @Test
   void shouldCallNextFilter() throws Exception {
     filter.doFilter(request, response, chain);
     verify(chain).doFilter(request, response);

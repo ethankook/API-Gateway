@@ -11,13 +11,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @RequiredArgsConstructor
-@Slf4j
 @Order(FilterOrder.AUTH)
 @Component("gatewayAuthFilter")
 public class AuthFilter extends OncePerRequestFilter {
@@ -29,6 +27,7 @@ public class AuthFilter extends OncePerRequestFilter {
       throws ServletException, IOException {
     Route route = (Route) request.getAttribute("matchedRoute");
     if (route.getRequiresAuth() != true) {
+      request.setAttribute("authResult", "skipped");
       filterChain.doFilter(request, response);
       return;
     }
@@ -36,6 +35,7 @@ public class AuthFilter extends OncePerRequestFilter {
     String authHeader = request.getHeader("Authorization");
 
     if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+      request.setAttribute("authResult", "invalid");
       FilterErrorResponseWriter.writeError(
           response,
           HttpServletResponse.SC_UNAUTHORIZED,
@@ -49,18 +49,17 @@ public class AuthFilter extends OncePerRequestFilter {
       Claims claims = jwtService.validate(token);
       Long userId = claims.get("userId", Long.class);
       if (userId == null) {
+        request.setAttribute("authResult", "invalid");
         FilterErrorResponseWriter.writeError(
             response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid token", request);
         return;
       }
-      request.setAttribute("X-Authorized-User", userId);
+      request.setAttribute("authResult", "valid");
+      request.setAttribute("X-Authenticated-User", userId);
       filterChain.doFilter(request, response);
 
     } catch (JwtException | IllegalArgumentException e) {
-      log.debug(
-          "JWT validation failed for requestId={}",
-          FilterErrorResponseWriter.requestId(request),
-          e);
+      request.setAttribute("authResult", "invalid");
       FilterErrorResponseWriter.writeError(
           response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid or expired token", request);
     }

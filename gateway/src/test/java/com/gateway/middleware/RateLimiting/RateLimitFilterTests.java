@@ -40,6 +40,7 @@ class RateLimitFilterTests {
     assertThat(response.getStatus()).isEqualTo(429);
     assertThat(response.getHeader("Retry-After")).isEqualTo("1");
     assertThat(response.getContentType()).isEqualTo("application/json");
+    assertThat(request.getAttribute("rateLimitResult")).isEqualTo("exceeded");
     assertThat(chain.getRequest()).isNull();
   }
 
@@ -55,6 +56,7 @@ class RateLimitFilterTests {
 
     assertThat(response.getStatus()).isEqualTo(200);
     assertThat(chain.getRequest()).isSameAs(request);
+    assertThat(request.getAttribute("rateLimitResult")).isEqualTo("allowed");
   }
 
   @Test
@@ -73,6 +75,7 @@ class RateLimitFilterTests {
 
     ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
     verify(rateLimiter).isAllowed(keyCaptor.capture(), any());
+    assertThat(request.getAttribute("rateLimitResult")).isEqualTo("allowed");
     assertThat(keyCaptor.getValue()).isEqualTo("192.168.1.1-public-route");
   }
 
@@ -86,7 +89,23 @@ class RateLimitFilterTests {
 
     ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
     verify(rateLimiter).isAllowed(keyCaptor.capture(), any());
+    assertThat(request.getAttribute("rateLimitResult")).isEqualTo("allowed");
     assertThat(keyCaptor.getValue()).isEqualTo("77-protected-route");
+  }
+
+  @Test
+  void nullRateLimiterResultReturns500AndMarksRateLimitAsSkipped()
+      throws ServletException, IOException {
+    when(rateLimiter.isAllowed(any(), any())).thenReturn(null);
+
+    MockHttpServletRequest request = authenticatedRequest(77L, "protected-route");
+    request.setAttribute("requestId", "req-rate-limit-null");
+    MockHttpServletResponse response = new MockHttpServletResponse();
+
+    filter.doFilter(request, response, new MockFilterChain());
+
+    assertThat(response.getStatus()).isEqualTo(500);
+    assertThat(request.getAttribute("rateLimitResult")).isEqualTo("skipped");
   }
 
   private MockHttpServletRequest authenticatedRequest(Long userId, String routeId) {
@@ -96,7 +115,7 @@ class RateLimitFilterTests {
 
     MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/protected");
     request.setAttribute("matchedRoute", route);
-    request.setAttribute("X-Authorized-User", userId);
+    request.setAttribute("X-Authenticated-User", userId);
     return request;
   }
 }

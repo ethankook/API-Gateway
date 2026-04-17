@@ -10,14 +10,12 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @Order(FilterOrder.RATE_LIMIT)
 @RequiredArgsConstructor
-@Slf4j
 @Component("gatewayRateLimitFilter")
 public class RateLimitFilter extends OncePerRequestFilter {
 
@@ -36,28 +34,25 @@ public class RateLimitFilter extends OncePerRequestFilter {
       key = ip + "-" + route.getRouteId();
 
     } else {
-      Long userId = (Long) request.getAttribute("X-Authorized-User");
+      Long userId = (Long) request.getAttribute("X-Authenticated-User");
       key = userId.toString() + "-" + route.getRouteId();
     }
 
     RateLimitResult result = rateLimiter.isAllowed(key, route);
 
     if (result == null) {
+      request.setAttribute("rateLimitResult", "skipped");
       FilterErrorResponseWriter.writeError(response, 500, "Internal server error", request);
-      log.warn(
-          "Internal server error while checking rate limit on route {}", route.getPathPrefix());
       return;
     }
     if (!result.isAllowed()) {
+      request.setAttribute("rateLimitResult", "exceeded");
       response.setHeader("Retry-After", String.valueOf(result.getRetryAfterSeconds()));
       FilterErrorResponseWriter.writeError(response, 429, "Rate limit exceeded.", request);
-      log.warn(
-          "Rate limit exceeded on route {}. Retry after {} seconds",
-          route.getPathPrefix(),
-          result.getRetryAfterSeconds());
       return;
     }
 
+    request.setAttribute("rateLimitResult", "allowed");
     filterChain.doFilter(request, response);
   }
 }

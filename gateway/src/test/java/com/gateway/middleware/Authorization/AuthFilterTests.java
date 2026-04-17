@@ -45,6 +45,7 @@ class AuthFilterTests {
     assertThat(response.getContentAsString())
         .isEqualTo(
             "{\"error\":\"Missing Authorization header or invalid format\",\"status\":401,\"requestId\":\"req-missing-token\"}");
+    assertThat(request.getAttribute("authResult")).isEqualTo("invalid");
     assertThat(chain.getRequest()).isNull();
   }
 
@@ -60,7 +61,8 @@ class AuthFilterTests {
 
     assertThat(chain.getRequest()).isSameAs(request);
     assertThat(response.getStatus()).isEqualTo(200);
-    assertThat(request.getAttribute("X-Authorized-User")).isEqualTo(42L);
+    assertThat(request.getAttribute("X-Authenticated-User")).isEqualTo(42L);
+    assertThat(request.getAttribute("authResult")).isEqualTo("valid");
   }
 
   @Test
@@ -79,6 +81,7 @@ class AuthFilterTests {
     assertThat(response.getContentAsString())
         .isEqualTo(
             "{\"error\":\"Invalid or expired token\",\"status\":401,\"requestId\":\"req-expired-token\"}");
+    assertThat(request.getAttribute("authResult")).isEqualTo("invalid");
     assertThat(chain.getRequest()).isNull();
   }
 
@@ -98,6 +101,7 @@ class AuthFilterTests {
     assertThat(response.getContentAsString())
         .isEqualTo(
             "{\"error\":\"Invalid token\",\"status\":401,\"requestId\":\"req-missing-user-id\"}");
+    assertThat(request.getAttribute("authResult")).isEqualTo("invalid");
     assertThat(chain.getRequest()).isNull();
   }
 
@@ -111,7 +115,8 @@ class AuthFilterTests {
 
     assertThat(chain.getRequest()).isSameAs(request);
     assertThat(response.getStatus()).isEqualTo(200);
-    assertThat(request.getAttribute("X-Authorized-User")).isNull();
+    assertThat(request.getAttribute("X-Authenticated-User")).isNull();
+    assertThat(request.getAttribute("authResult")).isEqualTo("skipped");
   }
 
   private MockHttpServletRequest protectedRequest() {

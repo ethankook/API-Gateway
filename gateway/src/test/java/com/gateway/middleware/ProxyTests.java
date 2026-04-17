@@ -7,8 +7,10 @@ import com.gateway.middleware.Proxy.ProxyFilter;
 import com.gateway.middleware.RequestTracing.RequestContextFilter;
 import com.gateway.middleware.RouteMatching.Route;
 import java.io.IOException;
+import java.net.URI;
 import java.net.ServerSocket;
 import java.time.Duration;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -19,11 +21,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
 @ExtendWith(OutputCaptureExtension.class)
@@ -88,8 +94,11 @@ class ProxyTests {
 
     String requestId = response.getHeader("X-Request-Id");
     assertThat(requestId).isNotBlank();
-    assertThat(output.getOut()).contains("Proxying requestId=" + requestId);
-    assertThat(output.getOut()).contains("Proxy response requestId=" + requestId);
+    assertThat(output.getOut()).contains("event=request_received requestId=" + requestId);
+    assertThat(output.getOut()).contains("event=request_completed requestId=" + requestId);
+    assertThat(output.getOut()).contains("route=League-Service");
+    assertThat(output.getOut()).contains("downstreamUrl=League-Service/42");
+    assertThat(output.getOut()).doesNotContain("http://localhost:");
   }
 
   @Test
@@ -131,6 +140,38 @@ class ProxyTests {
   }
 
   @Test
+  void returnsClean504JsonWhenWebClientSignalsTimeoutRequestException() throws Exception {
+    GatewayProperties properties = new GatewayProperties();
+    properties.setConnectTimeoutMs(250);
+    properties.setReadTimeoutMs(250);
+
+    WebClientRequestException timeoutException =
+        new WebClientRequestException(
+            new TimeoutException("timed out"),
+            HttpMethod.GET,
+            URI.create("http://localhost:8082/api/v1/leagues/42"),
+            HttpHeaders.EMPTY);
+
+    ProxyFilter timeoutProxyFilter =
+        new ProxyFilter(
+            WebClient.builder().exchangeFunction(req -> Mono.error(timeoutException)).build(),
+            properties);
+
+    MockHttpServletRequest request = matchedRequest("GET", "/api/v1/leagues/42");
+    MockHttpServletResponse response = new MockHttpServletResponse();
+
+    invokeThroughFilters(request, response, timeoutProxyFilter);
+
+    assertThat(response.getStatus()).isEqualTo(504);
+    assertThat(response.getContentType()).isEqualTo("application/json");
+    assertThat(response.getContentAsString()).contains("\"error\":\"Server timeout\"");
+    assertThat(response.getContentAsString()).contains("\"status\":504");
+    assertThat(response.getContentAsString())
+        .contains("\"requestId\":\"" + response.getHeader("X-Request-Id") + "\"");
+    assertThat(response.getContentAsString()).doesNotContain("localhost:8082");
+  }
+
+  @Test
   void delegatesToFilterChainWhenNoRouteMatched() throws Exception {
     MockHttpServletRequest request = new MockHttpServletRequest("GET", "/unknown");
     MockHttpServletResponse response = new MockHttpServletResponse();
@@ -158,10 +199,18 @@ class ProxyTests {
 
   private void invokeThroughFilters(
       MockHttpServletRequest request, MockHttpServletResponse response) throws Exception {
+    invokeThroughFilters(request, response, proxyFilter);
+  }
+
+  private void invokeThroughFilters(
+      MockHttpServletRequest request,
+      MockHttpServletResponse response,
+      ProxyFilter filter)
+      throws Exception {
     requestContextFilter.doFilter(
         request,
         response,
-        (req, res) -> proxyFilter.doFilter(request, response, new MockFilterChain()));
+        (req, res) -> filter.doFilter(request, response, new MockFilterChain()));
   }
 
   private int closedPort() throws IOException {

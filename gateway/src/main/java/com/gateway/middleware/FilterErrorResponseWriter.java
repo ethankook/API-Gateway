@@ -11,14 +11,16 @@ public final class FilterErrorResponseWriter {
   public static void writeError(
       HttpServletResponse response, int status, String message, HttpServletRequest request)
       throws IOException {
+    String requestId = requestId(request);
     response.setStatus(status);
     response.setContentType("application/json");
+    response.setHeader("X-Request-Id", requestId);
     response
         .getWriter()
         .write(
             String.format(
                 "{\"error\":\"%s\",\"status\":%d,\"requestId\":\"%s\"}",
-                escapeJson(message), status, escapeJson(requestId(request))));
+                escapeJson(message), status, escapeJson(requestId)));
   }
 
   public static String requestId(HttpServletRequest request) {

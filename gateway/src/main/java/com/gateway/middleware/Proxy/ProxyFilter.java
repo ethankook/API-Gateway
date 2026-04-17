@@ -14,7 +14,6 @@ import java.util.Enumeration;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -26,7 +25,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import reactor.core.publisher.Mono;
 
-@Slf4j
 @RequiredArgsConstructor
 @Order(FilterOrder.PROXY)
 @Component("gatewayProxyFilter")
@@ -34,7 +32,30 @@ public class ProxyFilter extends OncePerRequestFilter {
 
   private final WebClient webClient;
   private final GatewayProperties properties;
-  private final Set<String> excluded = Set.of("host", "content-length", "authorization");
+  private final Set<String> excluded = Set.of(
+          // Security - already handled
+          "authorization",
+
+          // Protocol - HTTP client handles
+          "content-length",
+          "transfer-encoding",
+          "connection",
+          "keep-alive",
+          "proxy-authenticate",
+          "proxy-authorization",
+          "te",
+          "trailer",
+          "upgrade",
+
+          // Gateway-internal - never trust from client
+          "x-request-id",
+          "x-authenticated-user",
+          "x-forwarded-for",
+          "x-forwarded-host",
+          "x-forwarded-proto",
+
+          // Special - handled separately
+          "host");
 
   @Override
   protected void doFilterInternal(
@@ -53,16 +74,20 @@ public class ProxyFilter extends OncePerRequestFilter {
             ? ""
             : "?" + request.getQueryString();
     String downstreamUrl = route.getDownstreamUrl() + tail + query;
+    String downstreamUrlForLog = route.getRouteId() + tail;
     byte[] body = hasBody(request) ? request.getInputStream().readAllBytes() : null;
+    long downstreamStart = System.currentTimeMillis();
 
     HttpHeaders headers = buildForwardHeaders(request);
     String requestId = FilterErrorResponseWriter.requestId(request);
-    log.info(
-        "Proxying requestId={} {} {} -> {}",
-        requestId,
-        request.getMethod(),
-        request.getRequestURI(),
-        downstreamUrl);
+
+    Object userId = request.getAttribute("X-Authenticated-User");
+    if (userId != null) {
+      headers.set("X-Authenticated-User", String.valueOf(userId));
+    }
+    headers.set("X-Forwarded-For", request.getRemoteAddr());
+    headers.set("X-Request-Id", requestId);
+    request.setAttribute("downstreamUrl", downstreamUrlForLog);
 
     try {
       ResponseEntity<byte[]> downstreamResponse =
@@ -77,6 +102,8 @@ public class ProxyFilter extends OncePerRequestFilter {
               .block(Duration.ofMillis(properties.getReadTimeoutMs()));
 
       if (downstreamResponse == null) {
+        request.setAttribute(
+            "downstreamLatencyMs", System.currentTimeMillis() - downstreamStart);
         FilterErrorResponseWriter.writeError(
             response,
             HttpServletResponse.SC_BAD_GATEWAY,
@@ -88,46 +115,27 @@ public class ProxyFilter extends OncePerRequestFilter {
       response.setStatus(downstreamResponse.getStatusCode().value());
       downstreamResponse
           .getHeaders()
-          .forEach((name, values) -> values.forEach(value -> response.addHeader(name, value)));
+              .forEach((name, values) -> values.forEach(value -> response.addHeader(name, value)));
 
       byte[] responseBody = downstreamResponse.getBody();
       if (responseBody != null) {
         response.getOutputStream().write(responseBody);
       }
-      log.info(
-          "Proxy response requestId={} {} {} <- {}",
-          requestId,
-          request.getMethod(),
-          request.getRequestURI(),
-          downstreamResponse.getStatusCode().value());
+      request.setAttribute("downstreamStatus", downstreamResponse.getStatusCode().value());
+      request.setAttribute("downstreamLatencyMs", System.currentTimeMillis() - downstreamStart);
     } catch (IllegalStateException e) {
-      log.warn(
-          "Proxy timeout requestId={} {} {}",
-          requestId,
-          request.getMethod(),
-          request.getRequestURI(),
-          e);
+      request.setAttribute("downstreamLatencyMs", System.currentTimeMillis() - downstreamStart);
       FilterErrorResponseWriter.writeError(
           response, HttpServletResponse.SC_GATEWAY_TIMEOUT, "Server timeout", request);
     } catch (WebClientRequestException e) {
       if (isTimeoutException(e)) {
-        log.warn(
-            "Proxy timeout requestId={} {} {}",
-            requestId,
-            request.getMethod(),
-            request.getRequestURI(),
-            e);
+        request.setAttribute("downstreamLatencyMs", System.currentTimeMillis() - downstreamStart);
         FilterErrorResponseWriter.writeError(
-            response, HttpServletResponse.SC_BAD_GATEWAY, "Server timeout", request);
+            response, HttpServletResponse.SC_GATEWAY_TIMEOUT, "Server timeout", request);
         return;
       }
 
-      log.warn(
-          "Proxy downstream unavailable requestId={} {} {}",
-          requestId,
-          request.getMethod(),
-          request.getRequestURI(),
-          e);
+      request.setAttribute("downstreamLatencyMs", System.currentTimeMillis() - downstreamStart);
       FilterErrorResponseWriter.writeError(
           response, HttpServletResponse.SC_BAD_GATEWAY, "Service unavailable", request);
     }
@@ -143,6 +151,9 @@ public class ProxyFilter extends OncePerRequestFilter {
     while (headerNames.hasMoreElements()) {
       String headerName = headerNames.nextElement();
       if (excluded.contains(headerName.toLowerCase())) {
+        if (headerName.equalsIgnoreCase("host")) {
+          headers.set("X-Forwarded-Host", request.getHeader("Host"));
+        }
         continue;
       }
       Enumeration<String> headerValues = request.getHeaders(headerName);
@@ -150,10 +161,6 @@ public class ProxyFilter extends OncePerRequestFilter {
       while (headerValues.hasMoreElements()) {
         headers.add(headerName, headerValues.nextElement());
       }
-    }
-    Object userId = request.getAttribute("X-Authorized-User");
-    if (userId != null) {
-      headers.set("X-Authorized-User", String.valueOf(userId));
     }
     return headers;
   }
@@ -166,7 +173,9 @@ public class ProxyFilter extends OncePerRequestFilter {
       }
 
       String simpleName = current.getClass().getSimpleName();
-      if ("ReadTimeoutException".equals(simpleName) || "TimeoutException".equals(simpleName)) {
+      if ("ReadTimeoutException".equals(simpleName)
+          || "ConnectTimeoutException".equals(simpleName)
+          || "TimeoutException".equals(simpleName)) {
         return true;
       }
 
