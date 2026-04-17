@@ -32,7 +32,8 @@ public class ProxyFilter extends OncePerRequestFilter {
 
   private final WebClient webClient;
   private final GatewayProperties properties;
-  private final Set<String> excluded = Set.of(
+  private final Set<String> excluded =
+      Set.of(
           // Security - already handled
           "authorization",
 
@@ -102,8 +103,7 @@ public class ProxyFilter extends OncePerRequestFilter {
               .block(Duration.ofMillis(properties.getReadTimeoutMs()));
 
       if (downstreamResponse == null) {
-        request.setAttribute(
-            "downstreamLatencyMs", System.currentTimeMillis() - downstreamStart);
+        request.setAttribute("downstreamLatencyMs", System.currentTimeMillis() - downstreamStart);
         FilterErrorResponseWriter.writeError(
             response,
             HttpServletResponse.SC_BAD_GATEWAY,
@@ -115,7 +115,7 @@ public class ProxyFilter extends OncePerRequestFilter {
       response.setStatus(downstreamResponse.getStatusCode().value());
       downstreamResponse
           .getHeaders()
-              .forEach((name, values) -> values.forEach(value -> response.addHeader(name, value)));
+          .forEach((name, values) -> values.forEach(value -> response.addHeader(name, value)));
 
       byte[] responseBody = downstreamResponse.getBody();
       if (responseBody != null) {

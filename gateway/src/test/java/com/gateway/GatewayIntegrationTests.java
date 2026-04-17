@@ -67,7 +67,8 @@ class GatewayIntegrationTests {
     registry.add("gateway.routes[2].rateLimitRefillRate", () -> "1");
     registry.add("gateway.routes[3].routeId", () -> "Down-Service");
     registry.add("gateway.routes[3].pathPrefix", () -> "/api/v1/down");
-    registry.add("gateway.routes[3].downstreamUrl", () -> "http://127.0.0.1:" + CLOSED_PORT + "/down");
+    registry.add(
+        "gateway.routes[3].downstreamUrl", () -> "http://127.0.0.1:" + CLOSED_PORT + "/down");
     registry.add("gateway.routes[3].requiresAuth", () -> "true");
   }
 
@@ -83,8 +84,7 @@ class GatewayIntegrationTests {
   }
 
   @Test
-  void authenticatedProtectedRouteIsForwardedAndReturned(CapturedOutput output)
-      throws Exception {
+  void authenticatedProtectedRouteIsForwardedAndReturned(CapturedOutput output) throws Exception {
     DOWNSTREAM.enqueue(
         new MockResponse()
             .setResponseCode(200)
@@ -102,7 +102,8 @@ class GatewayIntegrationTests {
     assertThat(forwarded.getHeader("Authorization")).isNull();
     assertThat(forwarded.getHeader("Accept")).isEqualTo("application/json");
     assertThat(forwarded.getHeader("X-Authenticated-User")).isEqualTo("101");
-    assertThat(forwarded.getHeader("X-Request-Id")).isEqualTo(response.getHeaders().getFirst("X-Request-Id"));
+    assertThat(forwarded.getHeader("X-Request-Id"))
+        .isEqualTo(response.getHeaders().getFirst("X-Request-Id"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getHeaders().getFirst("X-Downstream")).isEqualTo("league-service");
@@ -190,7 +191,8 @@ class GatewayIntegrationTests {
     ResponseEntity<String> response = get("/api/v1/unknown/resource");
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-    assertThat(response.getBody()).contains("\"error\":\"No route found for path: /api/v1/unknown/resource\"");
+    assertThat(response.getBody())
+        .contains("\"error\":\"No route found for path: /api/v1/unknown/resource\"");
     assertThat(response.getBody()).contains("\"status\":404");
     assertThat(noDownstreamRequest()).isTrue();
   }
@@ -214,7 +216,8 @@ class GatewayIntegrationTests {
 
     RecordedRequest forwarded = takeDownstreamRequest();
     assertThat(response.getHeaders().getFirst("X-Request-Id")).isNotBlank();
-    assertThat(forwarded.getHeader("X-Request-Id")).isEqualTo(response.getHeaders().getFirst("X-Request-Id"));
+    assertThat(forwarded.getHeader("X-Request-Id"))
+        .isEqualTo(response.getHeaders().getFirst("X-Request-Id"));
   }
 
   @Test

@@ -71,6 +71,30 @@ class JwtServiceTests {
     assertThrows(IncorrectClaimException.class, () -> jwtService.validate(token));
   }
 
+  @Test
+  void rejectsBlankSecretAtStartup() {
+    JwtProperties properties = new JwtProperties();
+    properties.setSecret(" ");
+    properties.setIssuer(ISSUER);
+
+    IllegalStateException exception =
+        assertThrows(IllegalStateException.class, () -> new JwtService(properties));
+
+    assertThat(exception).hasMessage("auth.jwt.secret must be configured");
+  }
+
+  @Test
+  void rejectsShortSecretAtStartup() {
+    JwtProperties properties = new JwtProperties();
+    properties.setSecret("short-secret-value");
+    properties.setIssuer(ISSUER);
+
+    IllegalStateException exception =
+        assertThrows(IllegalStateException.class, () -> new JwtService(properties));
+
+    assertThat(exception).hasMessage("auth.jwt.secret must be at least 32 bytes for HS256");
+  }
+
   private String signedToken(Long userId, Instant expiration, String secret) {
     return signedToken(userId, expiration, secret, ISSUER);
   }

@@ -7,11 +7,11 @@ import com.gateway.middleware.Proxy.ProxyFilter;
 import com.gateway.middleware.RequestTracing.RequestContextFilter;
 import com.gateway.middleware.RouteMatching.Route;
 import java.io.IOException;
-import java.net.URI;
 import java.net.ServerSocket;
+import java.net.URI;
 import java.time.Duration;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -203,14 +203,10 @@ class ProxyTests {
   }
 
   private void invokeThroughFilters(
-      MockHttpServletRequest request,
-      MockHttpServletResponse response,
-      ProxyFilter filter)
+      MockHttpServletRequest request, MockHttpServletResponse response, ProxyFilter filter)
       throws Exception {
     requestContextFilter.doFilter(
-        request,
-        response,
-        (req, res) -> filter.doFilter(request, response, new MockFilterChain()));
+        request, response, (req, res) -> filter.doFilter(request, response, new MockFilterChain()));
   }
 
   private int closedPort() throws IOException {
