@@ -9,6 +9,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "rate-limiting")
 public class RateLimitingProperties {
 
-    private Long defaultCapacity = 20L;
-    private Long defaultRefillRate = 2L;
+  private Long defaultCapacity = 20L;
+  private Long defaultRefillRate = 2L;
 }

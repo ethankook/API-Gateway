@@ -9,12 +9,15 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @EnableScheduling
-@EnableConfigurationProperties({GatewayProperties.class, JwtProperties.class, RateLimitingProperties.class})
+@EnableConfigurationProperties({
+  GatewayProperties.class,
+  JwtProperties.class,
+  RateLimitingProperties.class
+})
 @SpringBootApplication
 public class GatewayApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(GatewayApplication.class, args);
-    }
-
+  public static void main(String[] args) {
+    SpringApplication.run(GatewayApplication.class, args);
+  }
 }

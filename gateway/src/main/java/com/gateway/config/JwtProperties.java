@@ -8,6 +8,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Setter
 @ConfigurationProperties(prefix = "auth.jwt")
 public class JwtProperties {
-    private String secret;
-    private String issuer;
+  private String secret;
+  private String issuer;
 }
