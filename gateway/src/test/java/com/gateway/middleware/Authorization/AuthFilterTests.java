@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AuthFilterTests {
 
     private static final String SECRET = "01234567890123456789012345678901";
+    private static final String ISSUER = "Orchard";
 
     private AuthFilter authFilter;
 
@@ -27,7 +28,7 @@ class AuthFilterTests {
     void setUp() {
         JwtProperties properties = new JwtProperties();
         properties.setSecret(SECRET);
-        properties.setIssuer("Orchard");
+        properties.setIssuer(ISSUER);
         authFilter = new AuthFilter(new JwtService(properties));
     }
 
@@ -79,6 +80,23 @@ class AuthFilterTests {
     }
 
     @Test
+    void returns401ForProtectedRouteWhenUserIdClaimIsMissing() throws ServletException, IOException {
+        MockHttpServletRequest request = protectedRequest();
+        request.setAttribute("requestId", "req-missing-user-id");
+        request.addHeader("Authorization", "Bearer " + tokenWithoutUserId(Instant.now().plusSeconds(300)));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        authFilter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentType()).isEqualTo("application/json");
+        assertThat(response.getContentAsString()).isEqualTo(
+                "{\"error\":\"Invalid token\",\"status\":401,\"requestId\":\"req-missing-user-id\"}");
+        assertThat(chain.getRequest()).isNull();
+    }
+
+    @Test
     void forwardsPublicRouteWithoutToken() throws ServletException, IOException {
         MockHttpServletRequest request = requestForRoute(false);
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -105,8 +123,16 @@ class AuthFilterTests {
 
     private String signedToken(Long userId, Instant expiration) {
         return Jwts.builder()
-                .issuer("Orchard")
+                .issuer(ISSUER)
                 .claim("userId", userId)
+                .expiration(Date.from(expiration))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
+                .compact();
+    }
+
+    private String tokenWithoutUserId(Instant expiration) {
+        return Jwts.builder()
+                .issuer(ISSUER)
                 .expiration(Date.from(expiration))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
                 .compact();

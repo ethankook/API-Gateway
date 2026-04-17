@@ -4,7 +4,6 @@ import com.gateway.config.JwtProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import lombok.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -12,18 +11,19 @@ import javax.crypto.SecretKey;
 @Component
 public class JwtService {
 
-    private final SecretKey signInKey;
-    private final JwtProperties properties;
+    private final SecretKey signingKey;
+    private final String issuer;
 
     public JwtService(JwtProperties properties) {
         byte[] keyBytes = properties.getSecret().getBytes();
-        this.signInKey = Keys.hmacShaKeyFor(keyBytes);
-        this.properties = properties;
+        this.signingKey = Keys.hmacShaKeyFor(keyBytes);
+        this.issuer = properties.getIssuer();
     }
 
     public Claims validate(String token) {
         return Jwts.parser()
-                .verifyWith(signInKey)
+                .verifyWith(signingKey)
+                .requireIssuer(issuer)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();

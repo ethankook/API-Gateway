@@ -3,6 +3,7 @@ package com.gateway.middleware.Authorization;
 import com.gateway.config.JwtProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.IncorrectClaimException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.security.SignatureException;
@@ -18,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class JwtServiceTests {
 
     private static final String SECRET = "01234567890123456789012345678901";
+    private static final String ISSUER = "Orchard";
 
     private JwtService jwtService;
 
@@ -25,7 +27,7 @@ class JwtServiceTests {
     void setUp() {
         JwtProperties properties = new JwtProperties();
         properties.setSecret(SECRET);
-        properties.setIssuer("Orchard");
+        properties.setIssuer(ISSUER);
         jwtService = new JwtService(properties);
     }
 
@@ -62,9 +64,20 @@ class JwtServiceTests {
         assertThrows(IllegalArgumentException.class, () -> jwtService.validate(null));
     }
 
+    @Test
+    void rejectsTokenWithWrongIssuer() {
+        String token = signedToken(42L, Instant.now().plusSeconds(300), SECRET, "DifferentIssuer");
+
+        assertThrows(IncorrectClaimException.class, () -> jwtService.validate(token));
+    }
+
     private String signedToken(Long userId, Instant expiration, String secret) {
+        return signedToken(userId, expiration, secret, ISSUER);
+    }
+
+    private String signedToken(Long userId, Instant expiration, String secret, String issuer) {
         return Jwts.builder()
-                .issuer("Orchard")
+                .issuer(issuer)
                 .claim("userId", userId)
                 .expiration(Date.from(expiration))
                 .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(secret.getBytes()))

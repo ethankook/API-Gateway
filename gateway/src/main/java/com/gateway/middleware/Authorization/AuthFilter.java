@@ -4,6 +4,7 @@ import com.gateway.config.FilterOrder;
 import com.gateway.middleware.FilterErrorResponseWriter;
 import com.gateway.middleware.RouteMatching.Route;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,8 +26,8 @@ public class AuthFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
         Route route = (Route) request.getAttribute("matchedRoute");
         if (route.getRequiresAuth() != true) {
             filterChain.doFilter(request, response);
@@ -49,10 +50,20 @@ public class AuthFilter extends OncePerRequestFilter {
         try {
             Claims claims = jwtService.validate(token);
             Long userId = claims.get("userId", Long.class);
+            if (userId == null) {
+                FilterErrorResponseWriter.writeError(
+                        response,
+                        HttpServletResponse.SC_UNAUTHORIZED,
+                        "Invalid token",
+                        request
+                );
+                return;
+            }
             request.setAttribute("userId", userId);
             filterChain.doFilter(request, response);
 
-        } catch (Exception e) {
+        } catch (JwtException | IllegalArgumentException e) {
+            log.debug("JWT validation failed for requestId={}", FilterErrorResponseWriter.requestId(request), e);
             FilterErrorResponseWriter.writeError(
                     response,
                     HttpServletResponse.SC_UNAUTHORIZED,
@@ -60,8 +71,5 @@ public class AuthFilter extends OncePerRequestFilter {
                     request
             );
         }
-
-
-
     }
 }
