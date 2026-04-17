@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
+import java.util.List;
+
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -22,6 +24,7 @@ public class RouteMatchingFilterTests {
         Route route = new Route();
         route.setRouteId("League-Service");
         route.setPathPrefix("/api/v1/leagues");
+        route.setDownstreamUrl("http://localhost");
         properties.setRoutes(new Route[] {route});
 
         RouteMatchingFilter filter = new RouteMatchingFilter(new RouteResolver(properties));
@@ -57,5 +60,29 @@ public class RouteMatchingFilterTests {
         assertThat(response.getContentAsString()).contains("\"error\":\"No route found for path: /missing\"");
         assertThat(response.getContentAsString()).contains("\"status\":404");
         assertThat(response.getContentAsString()).contains("\"requestId\":\"unknown\"");
+    }
+
+    @Test
+    void returnsSharedJsonErrorWhenMethodNotAllowed() throws Exception {
+        GatewayProperties properties = new GatewayProperties();
+        Route route = new Route();
+        route.setRouteId("League-Service");
+        route.setPathPrefix("/api/v1/leagues");
+        route.setDownstreamUrl("http://localhost");
+        route.setMethods(List.of("POST", "PUT"));
+
+        properties.setRoutes(new Route[] {route});
+
+        RouteMatchingFilter filter = new RouteMatchingFilter(new RouteResolver(properties));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/leagues/42");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(405);
+
+
+
     }
 }

@@ -59,7 +59,7 @@ class AuthFilterTests {
 
         assertThat(chain.getRequest()).isSameAs(request);
         assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(request.getAttribute("userId")).isEqualTo(42L);
+        assertThat(request.getAttribute("X-Authorized-User")).isEqualTo(42L);
     }
 
     @Test
@@ -106,7 +106,7 @@ class AuthFilterTests {
 
         assertThat(chain.getRequest()).isSameAs(request);
         assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(request.getAttribute("userId")).isNull();
+        assertThat(request.getAttribute("X-Authorized-User")).isNull();
     }
 
     private MockHttpServletRequest protectedRequest() {

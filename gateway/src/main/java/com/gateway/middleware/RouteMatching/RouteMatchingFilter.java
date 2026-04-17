@@ -37,6 +37,20 @@ public class RouteMatchingFilter extends OncePerRequestFilter {
             );
             return;
         }
+
+        if (route.getMethods() != null
+                && !route.getMethods().isEmpty()
+                && !route.getMethods().contains(request.getMethod())) {
+            FilterErrorResponseWriter.writeError(
+                    response,
+                    HttpServletResponse.SC_METHOD_NOT_ALLOWED,
+                    "Method not allowed for path: " + path,
+                    request
+            );
+            return;
+        }
+
+
         request.setAttribute("matchedRoute", route);
 
         filterChain.doFilter(request, response);

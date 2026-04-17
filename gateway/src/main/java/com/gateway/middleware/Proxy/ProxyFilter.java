@@ -37,7 +37,8 @@ public class ProxyFilter extends OncePerRequestFilter {
     private final GatewayProperties properties;
     private final Set<String> excluded = Set.of(
             "host",
-            "content-length"
+            "content-length",
+            "authorization"
     );
 
     @Override
@@ -115,7 +116,7 @@ public class ProxyFilter extends OncePerRequestFilter {
         HttpHeaders headers = new HttpHeaders();
         while (headerNames.hasMoreElements()) {
             String headerName = headerNames.nextElement();
-            if (excluded.contains(headerName)) {
+            if (excluded.contains(headerName.toLowerCase())) {
                 continue;
             }
             Enumeration<String> headerValues = request.getHeaders(headerName);
@@ -123,6 +124,10 @@ public class ProxyFilter extends OncePerRequestFilter {
             while (headerValues.hasMoreElements()) {
                 headers.add(headerName, headerValues.nextElement());
             }
+        }
+        Object userId = request.getAttribute("X-Authorized-User");
+        if (userId != null) {
+            headers.set("X-Authorized-User", String.valueOf(userId));
         }
         return headers;
     }

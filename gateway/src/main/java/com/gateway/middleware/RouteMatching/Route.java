@@ -12,6 +12,7 @@ public class Route {
     String pathPrefix;
     String downstreamUrl;
     Boolean requiresAuth;
-    Integer rateLimit;
+    Long rateLimitCapacity;
+    Long rateLimitRefillRate;
     List<String> methods;
 }

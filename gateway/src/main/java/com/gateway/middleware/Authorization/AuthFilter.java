@@ -59,7 +59,7 @@ public class AuthFilter extends OncePerRequestFilter {
                 );
                 return;
             }
-            request.setAttribute("userId", userId);
+            request.setAttribute("X-Authorized-User", userId);
             filterChain.doFilter(request, response);
 
         } catch (JwtException | IllegalArgumentException e) {

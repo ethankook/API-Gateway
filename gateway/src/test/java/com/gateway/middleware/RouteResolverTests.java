@@ -75,6 +75,7 @@ public class RouteResolverTests {
         Route route = new Route();
         route.setRouteId(routeId);
         route.setPathPrefix(pathPrefix);
+        route.setDownstreamUrl("http://localhost");
         return route;
     }
 }

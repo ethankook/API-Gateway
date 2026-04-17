@@ -31,6 +31,10 @@ public class RouteResolver {
                 continue;
             }
 
+            if (route.getDownstreamUrl() == null || route.getDownstreamUrl().isBlank()) {
+                continue;
+            }
+
             if (!path.startsWith(route.getPathPrefix())) {
                 continue;
             }
