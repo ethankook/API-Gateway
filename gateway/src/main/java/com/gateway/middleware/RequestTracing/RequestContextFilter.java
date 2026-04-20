@@ -60,13 +60,14 @@ public class RequestContextFilter extends OncePerRequestFilter {
         routeId = route.getRouteId();
       }
       log.info(
-          "event=request_completed requestId={} method={} path={} route={} authResult={} authenticatedUser={} rateLimitResult={} downstreamUrl={} downstreamStatus={} downstreamLatencyMs={} totalLatencyMs={} responseStatus={}",
+          "event=request_completed requestId={} method={} path={} route={} authResult={} authenticatedPrincipalType={} authenticatedPrincipalId={} rateLimitResult={} downstreamUrl={} downstreamStatus={} downstreamLatencyMs={} totalLatencyMs={} responseStatus={}",
           requestId,
           method,
           path,
           routeId,
           request.getAttribute("authResult"),
-          request.getAttribute("X-Authenticated-User"),
+          request.getAttribute("X-Authenticated-Principal-Type"),
+          request.getAttribute("X-Authenticated-Principal-Id"),
           request.getAttribute("rateLimitResult"),
           request.getAttribute("downstreamUrl"),
           request.getAttribute("downstreamStatus"),

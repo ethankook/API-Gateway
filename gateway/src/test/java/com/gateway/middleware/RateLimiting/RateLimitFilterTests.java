@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-import com.gateway.middleware.RateLimiting.entities.RateLimitResult;
+import com.gateway.middleware.RateLimiting.entity.RateLimitResult;
 import com.gateway.middleware.RouteMatching.Route;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
@@ -80,7 +80,7 @@ class RateLimitFilterTests {
   }
 
   @Test
-  void authenticatedRouteUsesUserIdAndRouteIdAsKey() throws ServletException, IOException {
+  void authenticatedRouteUsesPrincipalAndRouteIdAsKey() throws ServletException, IOException {
     when(rateLimiter.isAllowed(any(), any())).thenReturn(new RateLimitResult(true, 9L, 0L));
 
     MockHttpServletRequest request = authenticatedRequest(77L, "protected-route");
@@ -90,7 +90,7 @@ class RateLimitFilterTests {
     ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
     verify(rateLimiter).isAllowed(keyCaptor.capture(), any());
     assertThat(request.getAttribute("rateLimitResult")).isEqualTo("allowed");
-    assertThat(keyCaptor.getValue()).isEqualTo("77-protected-route");
+    assertThat(keyCaptor.getValue()).isEqualTo("USER:77-protected-route");
   }
 
   @Test
@@ -115,7 +115,8 @@ class RateLimitFilterTests {
 
     MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/protected");
     request.setAttribute("matchedRoute", route);
-    request.setAttribute("X-Authenticated-User", userId);
+    request.setAttribute("X-Authenticated-Principal-Type", "USER");
+    request.setAttribute("X-Authenticated-Principal-Id", userId);
     return request;
   }
 }

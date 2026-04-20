@@ -1,4 +1,4 @@
-package com.gateway.middleware;
+package com.common.helper;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

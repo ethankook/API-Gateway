@@ -2,7 +2,7 @@ package com.gateway.middleware.RouteMatching;
 
 import static com.gateway.config.FilterOrder.ROUTE_MATCHING;
 
-import com.gateway.middleware.FilterErrorResponseWriter;
+import com.common.helper.FilterErrorResponseWriter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

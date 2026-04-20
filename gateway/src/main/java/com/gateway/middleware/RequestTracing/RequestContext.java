@@ -8,5 +8,6 @@ public class RequestContext {
   public String requestId;
   Instant startTime;
   Route matchedRoute;
-  Long authenticatedUserId;
+  String authenticatedPrincipalType;
+  Long authenticatedPrincipalId;
 }

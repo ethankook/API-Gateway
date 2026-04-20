@@ -101,7 +101,8 @@ class GatewayIntegrationTests {
     assertThat(forwarded.getPath()).isEqualTo("/leagues/42?view=summary");
     assertThat(forwarded.getHeader("Authorization")).isNull();
     assertThat(forwarded.getHeader("Accept")).isEqualTo("application/json");
-    assertThat(forwarded.getHeader("X-Authenticated-User")).isEqualTo("101");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Type")).isEqualTo("USER");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Id")).isEqualTo("101");
     assertThat(forwarded.getHeader("X-Request-Id"))
         .isEqualTo(response.getHeaders().getFirst("X-Request-Id"));
 
@@ -115,7 +116,8 @@ class GatewayIntegrationTests {
     assertThat(output.getOut()).contains("event=request_completed requestId=" + requestId);
     assertThat(output.getOut()).contains("route=League-Service");
     assertThat(output.getOut()).contains("authResult=valid");
-    assertThat(output.getOut()).contains("authenticatedUser=101");
+    assertThat(output.getOut()).contains("authenticatedPrincipalType=USER");
+    assertThat(output.getOut()).contains("authenticatedPrincipalId=101");
     assertThat(output.getOut()).contains("rateLimitResult=allowed");
     assertThat(output.getOut()).contains("downstreamUrl=League-Service/42");
     assertThat(output.getOut()).contains("downstreamStatus=200");
@@ -135,7 +137,8 @@ class GatewayIntegrationTests {
     RecordedRequest forwarded = takeDownstreamRequest();
     assertThat(forwarded.getPath()).isEqualTo("/public/ping?source=test");
     assertThat(forwarded.getHeader("Authorization")).isNull();
-    assertThat(forwarded.getHeader("X-Authenticated-User")).isNull();
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Type")).isNull();
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Id")).isNull();
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo("{\"ok\":true}");
   }
@@ -221,26 +224,29 @@ class GatewayIntegrationTests {
   }
 
   @Test
-  void authenticatedUserHeaderIsPropagatedToDownstream() throws Exception {
+  void authenticatedPrincipalHeadersArePropagatedToDownstream() throws Exception {
     DOWNSTREAM.enqueue(new MockResponse().setResponseCode(200).setBody("{\"ok\":true}"));
 
     HttpHeaders headers = bearerHeaders(validToken(105L, Instant.now().plusSeconds(300)));
     exchange("/api/v1/leagues/user-header", headers);
 
     RecordedRequest forwarded = takeDownstreamRequest();
-    assertThat(forwarded.getHeader("X-Authenticated-User")).isEqualTo("105");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Type")).isEqualTo("USER");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Id")).isEqualTo("105");
   }
 
   @Test
-  void forgedAuthenticatedUserHeaderIsOverwrittenByJwtIdentity() throws Exception {
+  void forgedAuthenticatedPrincipalHeadersAreOverwrittenByJwtIdentity() throws Exception {
     DOWNSTREAM.enqueue(new MockResponse().setResponseCode(200).setBody("{\"ok\":true}"));
 
     HttpHeaders headers = bearerHeaders(validToken(106L, Instant.now().plusSeconds(300)));
-    headers.add("X-Authenticated-User", "999999");
+    headers.add("X-Authenticated-Principal-Type", "SERVICE");
+    headers.add("X-Authenticated-Principal-Id", "999999");
     exchange("/api/v1/leagues/forged-user", headers);
 
     RecordedRequest forwarded = takeDownstreamRequest();
-    assertThat(forwarded.getHeader("X-Authenticated-User")).isEqualTo("106");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Type")).isEqualTo("USER");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Id")).isEqualTo("106");
   }
 
   private static void startDownstream() {

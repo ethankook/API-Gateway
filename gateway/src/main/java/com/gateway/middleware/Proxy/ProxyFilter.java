@@ -1,8 +1,8 @@
 package com.gateway.middleware.Proxy;
 
+import com.common.helper.FilterErrorResponseWriter;
 import com.gateway.config.FilterOrder;
 import com.gateway.config.GatewayProperties;
-import com.gateway.middleware.FilterErrorResponseWriter;
 import com.gateway.middleware.RouteMatching.Route;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -51,6 +51,8 @@ public class ProxyFilter extends OncePerRequestFilter {
           // Gateway-internal - never trust from client
           "x-request-id",
           "x-authenticated-user",
+          "x-authenticated-principal-type",
+          "x-authenticated-principal-id",
           "x-forwarded-for",
           "x-forwarded-host",
           "x-forwarded-proto",
@@ -82,9 +84,11 @@ public class ProxyFilter extends OncePerRequestFilter {
     HttpHeaders headers = buildForwardHeaders(request);
     String requestId = FilterErrorResponseWriter.requestId(request);
 
-    Object userId = request.getAttribute("X-Authenticated-User");
-    if (userId != null) {
-      headers.set("X-Authenticated-User", String.valueOf(userId));
+    Object principalType = request.getAttribute("X-Authenticated-Principal-Type");
+    Object principalId = request.getAttribute("X-Authenticated-Principal-Id");
+    if (principalType != null && principalId != null) {
+      headers.set("X-Authenticated-Principal-Type", String.valueOf(principalType));
+      headers.set("X-Authenticated-Principal-Id", String.valueOf(principalId));
     }
     headers.set("X-Forwarded-For", request.getRemoteAddr());
     headers.set("X-Request-Id", requestId);

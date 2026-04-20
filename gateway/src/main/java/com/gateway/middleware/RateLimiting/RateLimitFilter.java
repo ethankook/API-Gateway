@@ -1,8 +1,8 @@
 package com.gateway.middleware.RateLimiting;
 
+import com.common.helper.FilterErrorResponseWriter;
 import com.gateway.config.FilterOrder;
-import com.gateway.middleware.FilterErrorResponseWriter;
-import com.gateway.middleware.RateLimiting.entities.RateLimitResult;
+import com.gateway.middleware.RateLimiting.entity.RateLimitResult;
 import com.gateway.middleware.RouteMatching.Route;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -34,8 +34,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
       key = ip + "-" + route.getRouteId();
 
     } else {
-      Long userId = (Long) request.getAttribute("X-Authenticated-User");
-      key = userId.toString() + "-" + route.getRouteId();
+      String principalType = String.valueOf(request.getAttribute("X-Authenticated-Principal-Type"));
+      Long principalId = (Long) request.getAttribute("X-Authenticated-Principal-Id");
+      key = principalType + ":" + principalId + "-" + route.getRouteId();
     }
 
     RateLimitResult result = rateLimiter.isAllowed(key, route);

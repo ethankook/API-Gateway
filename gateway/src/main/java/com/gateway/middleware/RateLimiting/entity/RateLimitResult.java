@@ -1,4 +1,4 @@
-package com.gateway.middleware.RateLimiting.entities;
+package com.gateway.middleware.RateLimiting.entity;
 
 import lombok.Getter;
 

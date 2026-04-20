@@ -61,7 +61,25 @@ class AuthFilterTests {
 
     assertThat(chain.getRequest()).isSameAs(request);
     assertThat(response.getStatus()).isEqualTo(200);
-    assertThat(request.getAttribute("X-Authenticated-User")).isEqualTo(42L);
+    assertThat(request.getAttribute("X-Authenticated-Principal-Type")).isEqualTo("USER");
+    assertThat(request.getAttribute("X-Authenticated-Principal-Id")).isEqualTo(42L);
+    assertThat(request.getAttribute("authResult")).isEqualTo("valid");
+  }
+
+  @Test
+  void forwardsProtectedRouteWithValidServiceToken() throws ServletException, IOException {
+    MockHttpServletRequest request = protectedRequest();
+    request.addHeader(
+        "Authorization", "Bearer " + signedServiceToken(7L, Instant.now().plusSeconds(300)));
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    MockFilterChain chain = new MockFilterChain();
+
+    authFilter.doFilter(request, response, chain);
+
+    assertThat(chain.getRequest()).isSameAs(request);
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(request.getAttribute("X-Authenticated-Principal-Type")).isEqualTo("SERVICE");
+    assertThat(request.getAttribute("X-Authenticated-Principal-Id")).isEqualTo(7L);
     assertThat(request.getAttribute("authResult")).isEqualTo("valid");
   }
 
@@ -86,11 +104,12 @@ class AuthFilterTests {
   }
 
   @Test
-  void returns401ForProtectedRouteWhenUserIdClaimIsMissing() throws ServletException, IOException {
+  void returns401ForProtectedRouteWhenPrincipalIdClaimIsMissing()
+      throws ServletException, IOException {
     MockHttpServletRequest request = protectedRequest();
     request.setAttribute("requestId", "req-missing-user-id");
     request.addHeader(
-        "Authorization", "Bearer " + tokenWithoutUserId(Instant.now().plusSeconds(300)));
+        "Authorization", "Bearer " + tokenWithoutPrincipalId(Instant.now().plusSeconds(300)));
     MockHttpServletResponse response = new MockHttpServletResponse();
     MockFilterChain chain = new MockFilterChain();
 
@@ -106,6 +125,27 @@ class AuthFilterTests {
   }
 
   @Test
+  void returns401ForProtectedRouteWhenTokenHasUserAndServiceIds()
+      throws ServletException, IOException {
+    MockHttpServletRequest request = protectedRequest();
+    request.setAttribute("requestId", "req-ambiguous-principal");
+    request.addHeader(
+        "Authorization", "Bearer " + tokenWithUserAndServiceIds(Instant.now().plusSeconds(300)));
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    MockFilterChain chain = new MockFilterChain();
+
+    authFilter.doFilter(request, response, chain);
+
+    assertThat(response.getStatus()).isEqualTo(401);
+    assertThat(response.getContentType()).isEqualTo("application/json");
+    assertThat(response.getContentAsString())
+        .isEqualTo(
+            "{\"error\":\"Invalid token\",\"status\":401,\"requestId\":\"req-ambiguous-principal\"}");
+    assertThat(request.getAttribute("authResult")).isEqualTo("invalid");
+    assertThat(chain.getRequest()).isNull();
+  }
+
+  @Test
   void forwardsPublicRouteWithoutToken() throws ServletException, IOException {
     MockHttpServletRequest request = requestForRoute(false);
     MockHttpServletResponse response = new MockHttpServletResponse();
@@ -115,7 +155,8 @@ class AuthFilterTests {
 
     assertThat(chain.getRequest()).isSameAs(request);
     assertThat(response.getStatus()).isEqualTo(200);
-    assertThat(request.getAttribute("X-Authenticated-User")).isNull();
+    assertThat(request.getAttribute("X-Authenticated-Principal-Type")).isNull();
+    assertThat(request.getAttribute("X-Authenticated-Principal-Id")).isNull();
     assertThat(request.getAttribute("authResult")).isEqualTo("skipped");
   }
 
@@ -141,9 +182,28 @@ class AuthFilterTests {
         .compact();
   }
 
-  private String tokenWithoutUserId(Instant expiration) {
+  private String signedServiceToken(Long serviceId, Instant expiration) {
     return Jwts.builder()
         .issuer(ISSUER)
+        .claim("serviceId", serviceId)
+        .expiration(Date.from(expiration))
+        .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
+        .compact();
+  }
+
+  private String tokenWithoutPrincipalId(Instant expiration) {
+    return Jwts.builder()
+        .issuer(ISSUER)
+        .expiration(Date.from(expiration))
+        .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
+        .compact();
+  }
+
+  private String tokenWithUserAndServiceIds(Instant expiration) {
+    return Jwts.builder()
+        .issuer(ISSUER)
+        .claim("userId", 42L)
+        .claim("serviceId", 7L)
         .expiration(Date.from(expiration))
         .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
         .compact();

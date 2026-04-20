@@ -3,8 +3,8 @@ package com.gateway.middleware.RateLimiting;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.gateway.config.RateLimitingProperties;
-import com.gateway.middleware.RateLimiting.entities.RateLimitResult;
-import com.gateway.middleware.RateLimiting.entities.TokenBucket;
+import com.gateway.middleware.RateLimiting.entity.RateLimitResult;
+import com.gateway.middleware.RateLimiting.entity.TokenBucket;
 import com.gateway.middleware.RouteMatching.Route;
 import java.lang.reflect.Field;
 import java.time.Instant;

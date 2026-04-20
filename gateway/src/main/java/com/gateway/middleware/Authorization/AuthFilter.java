@@ -1,7 +1,7 @@
 package com.gateway.middleware.Authorization;
 
+import com.common.helper.FilterErrorResponseWriter;
 import com.gateway.config.FilterOrder;
-import com.gateway.middleware.FilterErrorResponseWriter;
 import com.gateway.middleware.RouteMatching.Route;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -48,14 +48,16 @@ public class AuthFilter extends OncePerRequestFilter {
     try {
       Claims claims = jwtService.validate(token);
       Long userId = claims.get("userId", Long.class);
-      if (userId == null) {
+      Long serviceId = claims.get("serviceId", Long.class);
+      if ((userId == null && serviceId == null) || (userId != null && serviceId != null)) {
         request.setAttribute("authResult", "invalid");
         FilterErrorResponseWriter.writeError(
             response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid token", request);
         return;
       }
       request.setAttribute("authResult", "valid");
-      request.setAttribute("X-Authenticated-User", userId);
+      request.setAttribute("X-Authenticated-Principal-Type", userId != null ? "USER" : "SERVICE");
+      request.setAttribute("X-Authenticated-Principal-Id", userId != null ? userId : serviceId);
       filterChain.doFilter(request, response);
 
     } catch (JwtException | IllegalArgumentException e) {
