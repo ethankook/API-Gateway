@@ -2,7 +2,6 @@ package validators.UrlValidator;
 
 import jakarta.validation.Constraint;
 import jakarta.validation.Payload;
-
 import java.lang.annotation.*;
 
 @Documented
@@ -11,10 +10,9 @@ import java.lang.annotation.*;
 @Target({ElementType.FIELD})
 public @interface ValidUrl {
 
-    String message() default "Invalid URL";
+  String message() default "Invalid URL";
 
-    Class<?>[ ] groups() default {};
+  Class<?>[] groups() default {};
 
-    Class<? extends Payload>[] payload() default {};
-
+  Class<? extends Payload>[] payload() default {};
 }

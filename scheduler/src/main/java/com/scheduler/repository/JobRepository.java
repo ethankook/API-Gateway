@@ -22,4 +22,7 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
             """,
       nativeQuery = true)
   List<Job> findDueJobsForUpdate(@Param("now") Instant now, @Param("limit") int limit);
+
+  @Query("SELECT j FROM Job j WHERE j.status = 'RUNNING' AND j.updatedAt < :threshold")
+  List<Job> findStuckJobs(@Param("threshold") Instant threshold);
 }

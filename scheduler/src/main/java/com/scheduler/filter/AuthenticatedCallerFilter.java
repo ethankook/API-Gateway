@@ -41,7 +41,10 @@ public class AuthenticatedCallerFilter extends OncePerRequestFilter {
         request.setAttribute("X-Authenticated-Principal-Id", principalId);
       } catch (IllegalArgumentException e) {
         FilterErrorResponseWriter.writeError(
-            response, HttpServletResponse.SC_BAD_REQUEST, "Invalid authenticated principal", request);
+            response,
+            HttpServletResponse.SC_BAD_REQUEST,
+            "Invalid authenticated principal",
+            request);
         return;
       }
     }
