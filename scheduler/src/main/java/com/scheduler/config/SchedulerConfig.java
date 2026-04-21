@@ -10,10 +10,10 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 @EnableScheduling
 public class SchedulerConfig {
 
-  @Value("${scheduler.core-pool-size}")
+  @Value("${scheduler.executor-core-pool-size:10}")
   private int corePoolSize;
 
-  @Value("${scheduler.max-pool-size}")
+  @Value("${scheduler.executor-max-pool-size:20}")
   private int maxPoolSize;
 
   @Bean(name = "jobExecutorPool", destroyMethod = "shutdown")

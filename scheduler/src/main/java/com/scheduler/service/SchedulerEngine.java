@@ -9,7 +9,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.RejectedExecutionException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jboss.logging.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -20,7 +19,6 @@ import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
-@RequiredArgsConstructor
 public class SchedulerEngine {
 
   private final JobService jobService;
@@ -28,13 +26,26 @@ public class SchedulerEngine {
   private final JobRepository jobRepository;
   private static final String INSTANCE_ID = UUID.randomUUID().toString();
 
+  public SchedulerEngine(
+      JobService jobService,
+      JobExecutor jobExecutor,
+      JobRepository jobRepository,
+      ThreadPoolTaskExecutor jobExecutorPool) {
+    this.jobService = jobService;
+    this.jobExecutor = jobExecutor;
+    this.jobRepository = jobRepository;
+    this.executorPool = jobExecutorPool;
+  }
+
   @Value("${scheduler.stuck-job-threshold-minutes:5}")
   private int stuckJobThresholdMinutes;
 
   @Qualifier("jobExecutorPool")
   private final ThreadPoolTaskExecutor executorPool;
 
-  @Scheduled(fixedDelayString = "${scheduler.poll-interval-ms:100}")
+  @Scheduled(
+      fixedDelayString = "${scheduler.poll-interval-ms:100}",
+      initialDelayString = "${scheduler.initial-delay-ms:0}")
   public void poll() {
     List<Job> jobs = jobService.claimDueJobs();
 
