@@ -18,6 +18,7 @@ import com.scheduler.enums.PrincipalType;
 import com.scheduler.repository.JobRepository;
 import com.scheduler.repository.JobRunRepository;
 import com.scheduler.service.JobService;
+import com.scheduler.service.TargetUrlGuard;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import java.time.Instant;
@@ -33,7 +34,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class JobServiceTests {
@@ -41,6 +44,8 @@ class JobServiceTests {
   @Mock private JobRepository jobRepository;
 
   @Mock private JobRunRepository jobRunRepository;
+
+  @Mock private TargetUrlGuard targetUrlGuard;
 
   @InjectMocks private JobService jobService;
 
@@ -186,6 +191,7 @@ class JobServiceTests {
 
     CreateJobResponse response = jobService.createJob(request, PrincipalType.USER, 1L);
 
+    verify(targetUrlGuard).validateAllowed("https://example.com/webhook");
     ArgumentCaptor<Job> jobCaptor = ArgumentCaptor.forClass(Job.class);
     verify(jobRepository).save(jobCaptor.capture());
     Job savedJob = jobCaptor.getValue();
@@ -227,6 +233,21 @@ class JobServiceTests {
     ArgumentCaptor<Job> jobCaptor = ArgumentCaptor.forClass(Job.class);
     verify(jobRepository).save(jobCaptor.capture());
     assertThat(jobCaptor.getValue().getPayload()).isNull();
+  }
+
+  @Test
+  void createJob_shouldRejectBlockedTargetUrlBeforeSaving() {
+    CreateJobRequest request = validCreateJobRequest();
+    doThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target URL host is not allowed"))
+        .when(targetUrlGuard)
+        .validateAllowed(request.targetUrl());
+
+    assertThatThrownBy(() -> jobService.createJob(request, PrincipalType.USER, 1L))
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+    verify(jobRepository, never()).save(any());
   }
 
   @Test
@@ -311,6 +332,108 @@ class JobServiceTests {
         .anySatisfy(
             violation ->
                 assertThat(violation.getPropertyPath()).hasToString(invalidCase.propertyPath()));
+  }
+
+  @Test
+  void getJobForRequester_shouldReturnOwnedJob() {
+    UUID jobId = UUID.randomUUID();
+    Job job = ownedJob(jobId, PrincipalType.USER, 42L);
+    when(jobRepository.findById(jobId)).thenReturn(java.util.Optional.of(job));
+
+    assertThat(jobService.getJob(jobId, PrincipalType.USER, 42L, false).id()).isEqualTo(jobId);
+  }
+
+  @Test
+  void getJobForRequester_shouldRejectDifferentOwner() {
+    UUID jobId = UUID.randomUUID();
+    Job job = ownedJob(jobId, PrincipalType.USER, 42L);
+    when(jobRepository.findById(jobId)).thenReturn(java.util.Optional.of(job));
+
+    assertThatThrownBy(() -> jobService.getJob(jobId, PrincipalType.USER, 99L, false))
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+  }
+
+  @Test
+  void getJobForRequester_shouldAllowAdminToReadOtherOwnersJob() {
+    UUID jobId = UUID.randomUUID();
+    Job job = ownedJob(jobId, PrincipalType.USER, 42L);
+    when(jobRepository.findById(jobId)).thenReturn(java.util.Optional.of(job));
+
+    assertThat(jobService.getJob(jobId, PrincipalType.USER, 99L, true).id()).isEqualTo(jobId);
+  }
+
+  @Test
+  void listJobsForRequester_shouldForceNonAdminOwnerScope() {
+    Job job = ownedJob(UUID.randomUUID(), PrincipalType.USER, 42L);
+    when(jobRepository.findJobs(PrincipalType.USER, 42L, JobStatus.PENDING))
+        .thenReturn(List.of(job));
+
+    assertThat(jobService.listJobs(PrincipalType.USER, 42L, false, null, null, JobStatus.PENDING))
+        .hasSize(1);
+
+    verify(jobRepository).findJobs(PrincipalType.USER, 42L, JobStatus.PENDING);
+  }
+
+  @Test
+  void listJobsForRequester_shouldRejectDifferentOwnerFilterForNonAdmin() {
+    assertThatThrownBy(
+            () ->
+                jobService.listJobs(PrincipalType.USER, 42L, false, PrincipalType.USER, 99L, null))
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+
+    verify(jobRepository, never()).findJobs(any(), any(), any());
+  }
+
+  @Test
+  void listJobsForRequester_shouldAllowAdminGlobalFilters() {
+    when(jobRepository.findJobs(PrincipalType.SERVICE, 7L, JobStatus.FAILED)).thenReturn(List.of());
+
+    jobService.listJobs(PrincipalType.USER, 42L, true, PrincipalType.SERVICE, 7L, JobStatus.FAILED);
+
+    verify(jobRepository).findJobs(PrincipalType.SERVICE, 7L, JobStatus.FAILED);
+  }
+
+  @Test
+  void deleteJobForRequester_shouldRejectDifferentOwnerAndNotDelete() {
+    UUID jobId = UUID.randomUUID();
+    Job job = ownedJob(jobId, PrincipalType.USER, 42L);
+    when(jobRepository.findById(jobId)).thenReturn(java.util.Optional.of(job));
+
+    assertThatThrownBy(() -> jobService.deleteJob(jobId, PrincipalType.USER, 99L, false))
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+
+    verify(jobRepository, never()).delete(any(Job.class));
+  }
+
+  @Test
+  void deleteJobForRequester_shouldAllowAdminToDeleteOtherOwnersJob() {
+    UUID jobId = UUID.randomUUID();
+    Job job = ownedJob(jobId, PrincipalType.USER, 42L);
+    when(jobRepository.findById(jobId)).thenReturn(java.util.Optional.of(job));
+
+    jobService.deleteJob(jobId, PrincipalType.USER, 99L, true);
+
+    verify(jobRepository).delete(job);
+  }
+
+  @Test
+  void getJobRunsForRequester_shouldRejectDifferentOwnerAndNotQueryRuns() {
+    UUID jobId = UUID.randomUUID();
+    Job job = ownedJob(jobId, PrincipalType.USER, 42L);
+    when(jobRepository.findById(jobId)).thenReturn(java.util.Optional.of(job));
+
+    assertThatThrownBy(() -> jobService.getJobRuns(jobId, PrincipalType.SERVICE, 42L, false))
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+
+    verify(jobRunRepository, never()).findAllByJob_IdOrderByStartedAtAsc(any());
   }
 
   private static CreateJobRequest validCreateJobRequest() {
@@ -430,6 +553,25 @@ class JobServiceTests {
         request.payload(),
         request.maxAttempts(),
         retryBackoffSeconds);
+  }
+
+  private static Job ownedJob(UUID id, PrincipalType ownerType, Long ownerId) {
+    Job job = new Job();
+    job.setId(id);
+    job.setName("test-job");
+    job.setType(JobType.ONE_TIME);
+    job.setNextFireTime(Instant.now().plusSeconds(60));
+    job.setStatus(JobStatus.PENDING);
+    job.setTargetUrl("https://example.com/webhook");
+    job.setHttpMethod(HttpMethod.POST);
+    job.setMaxAttempts(3);
+    job.setAttemptCount(0);
+    job.setRetryBackoffSeconds(60);
+    job.setOwnerType(ownerType);
+    job.setOwnerId(ownerId);
+    job.setCreatedAt(Instant.now());
+    job.setUpdatedAt(Instant.now());
+    return job;
   }
 
   private record InvalidCreateJobCase(

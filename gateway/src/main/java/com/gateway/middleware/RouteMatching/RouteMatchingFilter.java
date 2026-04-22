@@ -3,6 +3,7 @@ package com.gateway.middleware.RouteMatching;
 import static com.gateway.config.FilterOrder.ROUTE_MATCHING;
 
 import com.common.helper.FilterErrorResponseWriter;
+import com.gateway.config.GatewayFilterExclusions;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,6 +20,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class RouteMatchingFilter extends OncePerRequestFilter {
 
   private final RouteResolver routeResolver;
+
+  @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    return GatewayFilterExclusions.shouldBypassRouteFilters(request);
+  }
 
   @Override
   protected void doFilterInternal(

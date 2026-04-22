@@ -30,7 +30,7 @@ public class RouteResolver {
         continue;
       }
 
-      if (!path.startsWith(route.getPathPrefix())) {
+      if (!matchesPrefixBoundary(path, route.getPathPrefix())) {
         continue;
       }
 
@@ -41,5 +41,13 @@ public class RouteResolver {
     }
 
     return bestMatch;
+  }
+
+  private boolean matchesPrefixBoundary(String path, String prefix) {
+    if (!path.startsWith(prefix)) {
+      return false;
+    }
+
+    return path.length() == prefix.length() || path.charAt(prefix.length()) == '/';
   }
 }

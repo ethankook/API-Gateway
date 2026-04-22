@@ -32,6 +32,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class JobService {
   private final JobRepository jobRepository;
   private final JobRunRepository jobRunRepository;
+  private final TargetUrlGuard targetUrlGuard;
 
   @Value("${scheduler.batch-size:10}")
   private int batchSize;
@@ -40,6 +41,7 @@ public class JobService {
   public CreateJobResponse createJob(
       CreateJobRequest request, PrincipalType ownerType, Long ownerId) {
     log.info("Creating job from Request");
+    targetUrlGuard.validateAllowed(request.targetUrl());
     Job job = new Job();
     job.setName(request.name());
     job.setType(request.type());
@@ -64,14 +66,53 @@ public class JobService {
     return toJobResponse(getJobOrThrow(id));
   }
 
+  public JobResponse getJob(
+      UUID id, PrincipalType requesterType, Long requesterId, boolean requesterIsAdmin) {
+    Job job = getJobOrThrow(id);
+    authorizeJobAccess(job, requesterType, requesterId, requesterIsAdmin);
+    return toJobResponse(job);
+  }
+
   public List<JobResponse> listJobs(PrincipalType ownerType, Long ownerId, JobStatus status) {
     return jobRepository.findJobs(ownerType, ownerId, status).stream()
         .map(this::toJobResponse)
         .toList();
   }
 
+  public List<JobResponse> listJobs(
+      PrincipalType requesterType,
+      Long requesterId,
+      boolean requesterIsAdmin,
+      PrincipalType ownerType,
+      Long ownerId,
+      JobStatus status) {
+    PrincipalType effectiveOwnerType = ownerType;
+    Long effectiveOwnerId = ownerId;
+
+    if (!requesterIsAdmin) {
+      if ((ownerType != null && ownerType != requesterType)
+          || (ownerId != null && !Objects.equals(ownerId, requesterId))) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden");
+      }
+
+      effectiveOwnerType = requesterType;
+      effectiveOwnerId = requesterId;
+    }
+
+    return listJobs(effectiveOwnerType, effectiveOwnerId, status);
+  }
+
   public List<JobRunResponse> getJobRuns(UUID jobId) {
     getJobOrThrow(jobId);
+    return jobRunRepository.findAllByJob_IdOrderByStartedAtAsc(jobId).stream()
+        .map(this::toJobRunResponse)
+        .toList();
+  }
+
+  public List<JobRunResponse> getJobRuns(
+      UUID jobId, PrincipalType requesterType, Long requesterId, boolean requesterIsAdmin) {
+    Job job = getJobOrThrow(jobId);
+    authorizeJobAccess(job, requesterType, requesterId, requesterIsAdmin);
     return jobRunRepository.findAllByJob_IdOrderByStartedAtAsc(jobId).stream()
         .map(this::toJobRunResponse)
         .toList();
@@ -84,9 +125,19 @@ public class JobService {
   }
 
   @Transactional
+  public void deleteJob(
+      UUID id, PrincipalType requesterType, Long requesterId, boolean requesterIsAdmin) {
+    Job job = getJobOrThrow(id);
+    authorizeJobAccess(job, requesterType, requesterId, requesterIsAdmin);
+    jobRepository.delete(job);
+  }
+
+  @Transactional
   public List<Job> claimDueJobs() {
-    log.info("Claiming {} due jobs", batchSize);
     List<Job> dueJobs = jobRepository.findDueJobsForUpdate(Instant.now(), batchSize);
+    if (!dueJobs.isEmpty()) {
+      log.debug("Claimed {} due jobs", dueJobs.size());
+    }
 
     for (Job job : dueJobs) {
       job.setStatus(JobStatus.RUNNING);
@@ -119,6 +170,17 @@ public class JobService {
     return jobRepository
         .findById(id)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+  }
+
+  private void authorizeJobAccess(
+      Job job, PrincipalType requesterType, Long requesterId, boolean requesterIsAdmin) {
+    if (requesterIsAdmin) {
+      return;
+    }
+
+    if (job.getOwnerType() != requesterType || !Objects.equals(job.getOwnerId(), requesterId)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden");
+    }
   }
 
   private JobResponse toJobResponse(Job job) {

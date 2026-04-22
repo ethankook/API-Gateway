@@ -25,6 +25,7 @@ public abstract class BaseIntegrationTest {
     registry.add("spring.datasource.url", postgres::getJdbcUrl);
     registry.add("spring.datasource.username", postgres::getUsername);
     registry.add("spring.datasource.password", postgres::getPassword);
+    registry.add("scheduler.gateway-internal-token", () -> "test-gateway-internal-token");
     registry.add("scheduler.initial-delay-ms", () -> "3600000");
   }
 }

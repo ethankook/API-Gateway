@@ -2,6 +2,7 @@ package com.gateway.middleware.Proxy;
 
 import com.common.helper.FilterErrorResponseWriter;
 import com.gateway.config.FilterOrder;
+import com.gateway.config.GatewayFilterExclusions;
 import com.gateway.config.GatewayProperties;
 import com.gateway.middleware.RouteMatching.Route;
 import jakarta.servlet.FilterChain;
@@ -53,12 +54,19 @@ public class ProxyFilter extends OncePerRequestFilter {
           "x-authenticated-user",
           "x-authenticated-principal-type",
           "x-authenticated-principal-id",
+          "x-authenticated-is-admin",
+          "x-gateway-internal-token",
           "x-forwarded-for",
           "x-forwarded-host",
           "x-forwarded-proto",
 
           // Special - handled separately
           "host");
+
+  @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    return GatewayFilterExclusions.shouldBypassRouteFilters(request);
+  }
 
   @Override
   protected void doFilterInternal(
@@ -86,9 +94,14 @@ public class ProxyFilter extends OncePerRequestFilter {
 
     Object principalType = request.getAttribute("X-Authenticated-Principal-Type");
     Object principalId = request.getAttribute("X-Authenticated-Principal-Id");
+    Object isAdmin = request.getAttribute("X-Authenticated-Is-Admin");
     if (principalType != null && principalId != null) {
       headers.set("X-Authenticated-Principal-Type", String.valueOf(principalType));
       headers.set("X-Authenticated-Principal-Id", String.valueOf(principalId));
+      headers.set("X-Authenticated-Is-Admin", String.valueOf(Boolean.TRUE.equals(isAdmin)));
+    }
+    if (Boolean.TRUE.equals(route.getRequiresInternalToken())) {
+      headers.set("X-Gateway-Internal-Token", properties.getInternalToken());
     }
     headers.set("X-Forwarded-For", request.getRemoteAddr());
     headers.set("X-Request-Id", requestId);

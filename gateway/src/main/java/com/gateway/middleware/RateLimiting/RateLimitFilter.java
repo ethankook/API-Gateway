@@ -2,6 +2,7 @@ package com.gateway.middleware.RateLimiting;
 
 import com.common.helper.FilterErrorResponseWriter;
 import com.gateway.config.FilterOrder;
+import com.gateway.config.GatewayFilterExclusions;
 import com.gateway.middleware.RateLimiting.entity.RateLimitResult;
 import com.gateway.middleware.RouteMatching.Route;
 import jakarta.servlet.FilterChain;
@@ -20,6 +21,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class RateLimitFilter extends OncePerRequestFilter {
 
   private final RateLimiter rateLimiter;
+
+  @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    return GatewayFilterExclusions.shouldBypassRouteFilters(request);
+  }
 
   @Override
   protected void doFilterInternal(

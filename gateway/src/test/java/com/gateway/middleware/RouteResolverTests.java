@@ -38,6 +38,18 @@ public class RouteResolverTests {
   }
 
   @Test
+  void returnsRouteForSlashBoundedPath() {
+    Route resolved = resolver.resolve("/scheduler/jobs");
+    assertEquals("Scheduler-Service", resolved.getRouteId());
+  }
+
+  @Test
+  void returnsNullForPartialPrefixMatch() {
+    Route resolved = resolver.resolve("/scheduler-jobs");
+    assertNull(resolved);
+  }
+
+  @Test
   void returnsNullForEmptyPath() {
     Route resolved = resolver.resolve("");
     assertNull(resolved);

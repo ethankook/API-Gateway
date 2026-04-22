@@ -63,6 +63,23 @@ class AuthFilterTests {
     assertThat(response.getStatus()).isEqualTo(200);
     assertThat(request.getAttribute("X-Authenticated-Principal-Type")).isEqualTo("USER");
     assertThat(request.getAttribute("X-Authenticated-Principal-Id")).isEqualTo(42L);
+    assertThat(request.getAttribute("X-Authenticated-Is-Admin")).isEqualTo(false);
+    assertThat(request.getAttribute("authResult")).isEqualTo("valid");
+  }
+
+  @Test
+  void forwardsProtectedRouteWithAdminClaim() throws ServletException, IOException {
+    MockHttpServletRequest request = protectedRequest();
+    request.addHeader(
+        "Authorization", "Bearer " + signedToken(42L, true, Instant.now().plusSeconds(300)));
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    MockFilterChain chain = new MockFilterChain();
+
+    authFilter.doFilter(request, response, chain);
+
+    assertThat(chain.getRequest()).isSameAs(request);
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(request.getAttribute("X-Authenticated-Is-Admin")).isEqualTo(true);
     assertThat(request.getAttribute("authResult")).isEqualTo("valid");
   }
 
@@ -174,9 +191,14 @@ class AuthFilterTests {
   }
 
   private String signedToken(Long userId, Instant expiration) {
+    return signedToken(userId, false, expiration);
+  }
+
+  private String signedToken(Long userId, boolean admin, Instant expiration) {
     return Jwts.builder()
         .issuer(ISSUER)
         .claim("userId", userId)
+        .claim("admin", admin)
         .expiration(Date.from(expiration))
         .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
         .compact();

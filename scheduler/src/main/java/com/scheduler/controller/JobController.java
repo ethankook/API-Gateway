@@ -42,18 +42,33 @@ public class JobController {
   }
 
   @GetMapping("/{id}")
-  public ResponseEntity<JobResponse> getJob(@PathVariable UUID id) {
-    return ResponseEntity.ok(jobService.getJob(id));
+  public ResponseEntity<JobResponse> getJob(@PathVariable UUID id, HttpServletRequest request) {
+    return ResponseEntity.ok(
+        jobService.getJob(
+            id,
+            authenticatedPrincipalType(request),
+            authenticatedPrincipalId(request),
+            isAdmin(request)));
   }
 
   @GetMapping("/{id}/runs")
-  public ResponseEntity<List<JobRunResponse>> getJobRuns(@PathVariable UUID id) {
-    return ResponseEntity.ok(jobService.getJobRuns(id));
+  public ResponseEntity<List<JobRunResponse>> getJobRuns(
+      @PathVariable UUID id, HttpServletRequest request) {
+    return ResponseEntity.ok(
+        jobService.getJobRuns(
+            id,
+            authenticatedPrincipalType(request),
+            authenticatedPrincipalId(request),
+            isAdmin(request)));
   }
 
   @DeleteMapping("/{id}")
-  public ResponseEntity<Void> deleteJob(@PathVariable UUID id) {
-    jobService.deleteJob(id);
+  public ResponseEntity<Void> deleteJob(@PathVariable UUID id, HttpServletRequest request) {
+    jobService.deleteJob(
+        id,
+        authenticatedPrincipalType(request),
+        authenticatedPrincipalId(request),
+        isAdmin(request));
     return ResponseEntity.noContent().build();
   }
 
@@ -61,7 +76,27 @@ public class JobController {
   public ResponseEntity<List<JobResponse>> listJobs(
       @RequestParam(required = false) PrincipalType ownerType,
       @RequestParam(required = false) Long ownerId,
-      @RequestParam(required = false) JobStatus status) {
-    return ResponseEntity.ok(jobService.listJobs(ownerType, ownerId, status));
+      @RequestParam(required = false) JobStatus status,
+      HttpServletRequest request) {
+    return ResponseEntity.ok(
+        jobService.listJobs(
+            authenticatedPrincipalType(request),
+            authenticatedPrincipalId(request),
+            isAdmin(request),
+            ownerType,
+            ownerId,
+            status));
+  }
+
+  private PrincipalType authenticatedPrincipalType(HttpServletRequest request) {
+    return (PrincipalType) request.getAttribute("X-Authenticated-Principal-Type");
+  }
+
+  private Long authenticatedPrincipalId(HttpServletRequest request) {
+    return (Long) request.getAttribute("X-Authenticated-Principal-Id");
+  }
+
+  private boolean isAdmin(HttpServletRequest request) {
+    return Boolean.TRUE.equals(request.getAttribute("X-Authenticated-Is-Admin"));
   }
 }

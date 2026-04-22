@@ -2,6 +2,7 @@ package com.gateway.middleware.Authorization;
 
 import com.common.helper.FilterErrorResponseWriter;
 import com.gateway.config.FilterOrder;
+import com.gateway.config.GatewayFilterExclusions;
 import com.gateway.middleware.RouteMatching.Route;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -20,6 +21,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component("gatewayAuthFilter")
 public class AuthFilter extends OncePerRequestFilter {
   private final JwtService jwtService;
+
+  @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    return GatewayFilterExclusions.shouldBypassRouteFilters(request);
+  }
 
   @Override
   protected void doFilterInternal(
@@ -49,6 +55,7 @@ public class AuthFilter extends OncePerRequestFilter {
       Claims claims = jwtService.validate(token);
       Long userId = claims.get("userId", Long.class);
       Long serviceId = claims.get("serviceId", Long.class);
+      Boolean admin = claims.get("admin", Boolean.class);
       if ((userId == null && serviceId == null) || (userId != null && serviceId != null)) {
         request.setAttribute("authResult", "invalid");
         FilterErrorResponseWriter.writeError(
@@ -58,6 +65,7 @@ public class AuthFilter extends OncePerRequestFilter {
       request.setAttribute("authResult", "valid");
       request.setAttribute("X-Authenticated-Principal-Type", userId != null ? "USER" : "SERVICE");
       request.setAttribute("X-Authenticated-Principal-Id", userId != null ? userId : serviceId);
+      request.setAttribute("X-Authenticated-Is-Admin", Boolean.TRUE.equals(admin));
       filterChain.doFilter(request, response);
 
     } catch (JwtException | IllegalArgumentException e) {

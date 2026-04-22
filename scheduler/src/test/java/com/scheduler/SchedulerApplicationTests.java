@@ -28,6 +28,7 @@ class SchedulerApplicationTests {
     registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
     registry.add("spring.datasource.username", POSTGRES::getUsername);
     registry.add("spring.datasource.password", POSTGRES::getPassword);
+    registry.add("scheduler.gateway-internal-token", () -> "test-gateway-internal-token");
   }
 
   @Test
