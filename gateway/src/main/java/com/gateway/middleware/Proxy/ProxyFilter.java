@@ -63,6 +63,18 @@ public class ProxyFilter extends OncePerRequestFilter {
           // Special - handled separately
           "host");
 
+  private final Set<String> excludedResponseHeaders =
+      Set.of(
+          "connection",
+          "content-length",
+          "keep-alive",
+          "proxy-authenticate",
+          "proxy-authorization",
+          "te",
+          "trailer",
+          "transfer-encoding",
+          "upgrade");
+
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
     return GatewayFilterExclusions.shouldBypassRouteFilters(request);
@@ -132,7 +144,12 @@ public class ProxyFilter extends OncePerRequestFilter {
       response.setStatus(downstreamResponse.getStatusCode().value());
       downstreamResponse
           .getHeaders()
-          .forEach((name, values) -> values.forEach(value -> response.addHeader(name, value)));
+          .forEach(
+              (name, values) -> {
+                if (!excludedResponseHeaders.contains(name.toLowerCase())) {
+                  values.forEach(value -> response.addHeader(name, value));
+                }
+              });
 
       byte[] responseBody = downstreamResponse.getBody();
       if (responseBody != null) {

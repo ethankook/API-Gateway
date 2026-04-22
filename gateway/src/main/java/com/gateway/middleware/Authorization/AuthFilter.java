@@ -32,7 +32,7 @@ public class AuthFilter extends OncePerRequestFilter {
       HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws ServletException, IOException {
     Route route = (Route) request.getAttribute("matchedRoute");
-    if (route.getRequiresAuth() != true) {
+    if (!Boolean.TRUE.equals(route.getRequiresAuth())) {
       request.setAttribute("authResult", "skipped");
       filterChain.doFilter(request, response);
       return;
@@ -53,8 +53,8 @@ public class AuthFilter extends OncePerRequestFilter {
     String token = authHeader.substring("Bearer ".length());
     try {
       Claims claims = jwtService.validate(token);
-      Long userId = claims.get("userId", Long.class);
-      Long serviceId = claims.get("serviceId", Long.class);
+      Long userId = claimAsLong(claims, "userId");
+      Long serviceId = claimAsLong(claims, "serviceId");
       Boolean admin = claims.get("admin", Boolean.class);
       if ((userId == null && serviceId == null) || (userId != null && serviceId != null)) {
         request.setAttribute("authResult", "invalid");
@@ -73,5 +73,16 @@ public class AuthFilter extends OncePerRequestFilter {
       FilterErrorResponseWriter.writeError(
           response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid or expired token", request);
     }
+  }
+
+  private Long claimAsLong(Claims claims, String claimName) {
+    Object value = claims.get(claimName);
+    if (value == null) {
+      return null;
+    }
+    if (value instanceof Number number) {
+      return number.longValue();
+    }
+    throw new IllegalArgumentException("Invalid principal claim type");
   }
 }

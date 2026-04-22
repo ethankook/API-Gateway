@@ -35,7 +35,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     Route route = (Route) request.getAttribute("matchedRoute");
     String key;
 
-    if (!route.getRequiresAuth()) {
+    if (!Boolean.TRUE.equals(route.getRequiresAuth())) {
       String ip = request.getRemoteAddr();
       key = ip + "-" + route.getRouteId();
 

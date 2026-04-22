@@ -80,6 +80,24 @@ class RateLimitFilterTests {
   }
 
   @Test
+  void missingRequiresAuthDefaultsToIpRateLimitKey() throws ServletException, IOException {
+    when(rateLimiter.isAllowed(any(), any())).thenReturn(new RateLimitResult(true, 9L, 0L));
+
+    Route route = new Route();
+    route.setRouteId("default-public-route");
+
+    MockHttpServletRequest request = new MockHttpServletRequest("GET", "/public");
+    request.setRemoteAddr("203.0.113.10");
+    request.setAttribute("matchedRoute", route);
+
+    filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+    ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+    verify(rateLimiter).isAllowed(keyCaptor.capture(), any());
+    assertThat(keyCaptor.getValue()).isEqualTo("203.0.113.10-default-public-route");
+  }
+
+  @Test
   void authenticatedRouteUsesPrincipalAndRouteIdAsKey() throws ServletException, IOException {
     when(rateLimiter.isAllowed(any(), any())).thenReturn(new RateLimitResult(true, 9L, 0L));
 

@@ -42,7 +42,8 @@ public class RouteMatchingFilter extends OncePerRequestFilter {
 
     if (route.getMethods() != null
         && !route.getMethods().isEmpty()
-        && !route.getMethods().contains(request.getMethod())) {
+        && route.getMethods().stream()
+            .noneMatch(method -> method.equalsIgnoreCase(request.getMethod()))) {
       FilterErrorResponseWriter.writeError(
           response,
           HttpServletResponse.SC_METHOD_NOT_ALLOWED,

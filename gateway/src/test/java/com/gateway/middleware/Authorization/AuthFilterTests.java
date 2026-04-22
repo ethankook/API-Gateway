@@ -68,6 +68,21 @@ class AuthFilterTests {
   }
 
   @Test
+  void forwardsProtectedRouteWithIntegerPrincipalClaim() throws ServletException, IOException {
+    MockHttpServletRequest request = protectedRequest();
+    request.addHeader(
+        "Authorization", "Bearer " + signedIntegerToken(42, Instant.now().plusSeconds(300)));
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    MockFilterChain chain = new MockFilterChain();
+
+    authFilter.doFilter(request, response, chain);
+
+    assertThat(chain.getRequest()).isSameAs(request);
+    assertThat(request.getAttribute("X-Authenticated-Principal-Id")).isEqualTo(42L);
+    assertThat(request.getAttribute("authResult")).isEqualTo("valid");
+  }
+
+  @Test
   void forwardsProtectedRouteWithAdminClaim() throws ServletException, IOException {
     MockHttpServletRequest request = protectedRequest();
     request.addHeader(
@@ -177,6 +192,19 @@ class AuthFilterTests {
     assertThat(request.getAttribute("authResult")).isEqualTo("skipped");
   }
 
+  @Test
+  void treatsMissingRequiresAuthAsPublicRoute() throws ServletException, IOException {
+    MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/public");
+    request.setAttribute("matchedRoute", new Route());
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    MockFilterChain chain = new MockFilterChain();
+
+    authFilter.doFilter(request, response, chain);
+
+    assertThat(chain.getRequest()).isSameAs(request);
+    assertThat(request.getAttribute("authResult")).isEqualTo("skipped");
+  }
+
   private MockHttpServletRequest protectedRequest() {
     return requestForRoute(true);
   }
@@ -208,6 +236,15 @@ class AuthFilterTests {
     return Jwts.builder()
         .issuer(ISSUER)
         .claim("serviceId", serviceId)
+        .expiration(Date.from(expiration))
+        .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
+        .compact();
+  }
+
+  private String signedIntegerToken(Integer userId, Instant expiration) {
+    return Jwts.builder()
+        .issuer(ISSUER)
+        .claim("userId", userId)
         .expiration(Date.from(expiration))
         .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
         .compact();
