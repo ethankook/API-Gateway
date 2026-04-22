@@ -2,7 +2,8 @@ package com.gateway.middleware.RouteMatching;
 
 import static com.gateway.config.FilterOrder.ROUTE_MATCHING;
 
-import com.gateway.middleware.FilterErrorResponseWriter;
+import com.common.helper.FilterErrorResponseWriter;
+import com.gateway.config.GatewayFilterExclusions;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,6 +22,11 @@ public class RouteMatchingFilter extends OncePerRequestFilter {
   private final RouteResolver routeResolver;
 
   @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    return GatewayFilterExclusions.shouldBypassRouteFilters(request);
+  }
+
+  @Override
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws ServletException, IOException {
@@ -36,7 +42,8 @@ public class RouteMatchingFilter extends OncePerRequestFilter {
 
     if (route.getMethods() != null
         && !route.getMethods().isEmpty()
-        && !route.getMethods().contains(request.getMethod())) {
+        && route.getMethods().stream()
+            .noneMatch(method -> method.equalsIgnoreCase(request.getMethod()))) {
       FilterErrorResponseWriter.writeError(
           response,
           HttpServletResponse.SC_METHOD_NOT_ALLOWED,

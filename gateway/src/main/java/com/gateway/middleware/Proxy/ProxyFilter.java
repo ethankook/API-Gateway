@@ -1,8 +1,9 @@
 package com.gateway.middleware.Proxy;
 
+import com.common.helper.FilterErrorResponseWriter;
 import com.gateway.config.FilterOrder;
+import com.gateway.config.GatewayFilterExclusions;
 import com.gateway.config.GatewayProperties;
-import com.gateway.middleware.FilterErrorResponseWriter;
 import com.gateway.middleware.RouteMatching.Route;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -51,12 +52,33 @@ public class ProxyFilter extends OncePerRequestFilter {
           // Gateway-internal - never trust from client
           "x-request-id",
           "x-authenticated-user",
+          "x-authenticated-principal-type",
+          "x-authenticated-principal-id",
+          "x-authenticated-is-admin",
+          "x-gateway-internal-token",
           "x-forwarded-for",
           "x-forwarded-host",
           "x-forwarded-proto",
 
           // Special - handled separately
           "host");
+
+  private final Set<String> excludedResponseHeaders =
+      Set.of(
+          "connection",
+          "content-length",
+          "keep-alive",
+          "proxy-authenticate",
+          "proxy-authorization",
+          "te",
+          "trailer",
+          "transfer-encoding",
+          "upgrade");
+
+  @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    return GatewayFilterExclusions.shouldBypassRouteFilters(request);
+  }
 
   @Override
   protected void doFilterInternal(
@@ -82,9 +104,16 @@ public class ProxyFilter extends OncePerRequestFilter {
     HttpHeaders headers = buildForwardHeaders(request);
     String requestId = FilterErrorResponseWriter.requestId(request);
 
-    Object userId = request.getAttribute("X-Authenticated-User");
-    if (userId != null) {
-      headers.set("X-Authenticated-User", String.valueOf(userId));
+    Object principalType = request.getAttribute("X-Authenticated-Principal-Type");
+    Object principalId = request.getAttribute("X-Authenticated-Principal-Id");
+    Object isAdmin = request.getAttribute("X-Authenticated-Is-Admin");
+    if (principalType != null && principalId != null) {
+      headers.set("X-Authenticated-Principal-Type", String.valueOf(principalType));
+      headers.set("X-Authenticated-Principal-Id", String.valueOf(principalId));
+      headers.set("X-Authenticated-Is-Admin", String.valueOf(Boolean.TRUE.equals(isAdmin)));
+    }
+    if (Boolean.TRUE.equals(route.getRequiresInternalToken())) {
+      headers.set("X-Gateway-Internal-Token", properties.getInternalToken());
     }
     headers.set("X-Forwarded-For", request.getRemoteAddr());
     headers.set("X-Request-Id", requestId);
@@ -115,7 +144,12 @@ public class ProxyFilter extends OncePerRequestFilter {
       response.setStatus(downstreamResponse.getStatusCode().value());
       downstreamResponse
           .getHeaders()
-          .forEach((name, values) -> values.forEach(value -> response.addHeader(name, value)));
+          .forEach(
+              (name, values) -> {
+                if (!excludedResponseHeaders.contains(name.toLowerCase())) {
+                  values.forEach(value -> response.addHeader(name, value));
+                }
+              });
 
       byte[] responseBody = downstreamResponse.getBody();
       if (responseBody != null) {

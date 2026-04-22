@@ -35,6 +35,7 @@ class GatewayIntegrationTests {
 
   private static final String SECRET = "01234567890123456789012345678901";
   private static final String ISSUER = "Orchard";
+  private static final String INTERNAL_TOKEN = "test-gateway-internal-token";
   private static final MockWebServer DOWNSTREAM = new MockWebServer();
   private static final int CLOSED_PORT = findClosedPort();
 
@@ -49,6 +50,7 @@ class GatewayIntegrationTests {
     registry.add("auth.jwt.issuer", () -> ISSUER);
     registry.add("gateway.connect-timeout-ms", () -> "250");
     registry.add("gateway.read-timeout-ms", () -> "250");
+    registry.add("gateway.internal-token", () -> INTERNAL_TOKEN);
     registry.add("rate-limiting.default-capacity", () -> "20");
     registry.add("rate-limiting.default-refill-rate", () -> "5");
     registry.add("gateway.routes[0].routeId", () -> "Public-Service");
@@ -70,6 +72,11 @@ class GatewayIntegrationTests {
     registry.add(
         "gateway.routes[3].downstreamUrl", () -> "http://127.0.0.1:" + CLOSED_PORT + "/down");
     registry.add("gateway.routes[3].requiresAuth", () -> "true");
+    registry.add("gateway.routes[4].routeId", () -> "Scheduler-Service");
+    registry.add("gateway.routes[4].pathPrefix", () -> "/api/v1/jobs");
+    registry.add("gateway.routes[4].downstreamUrl", () -> downstreamBaseUrl() + "/jobs");
+    registry.add("gateway.routes[4].requiresAuth", () -> "true");
+    registry.add("gateway.routes[4].requiresInternalToken", () -> "true");
   }
 
   @BeforeEach
@@ -101,7 +108,8 @@ class GatewayIntegrationTests {
     assertThat(forwarded.getPath()).isEqualTo("/leagues/42?view=summary");
     assertThat(forwarded.getHeader("Authorization")).isNull();
     assertThat(forwarded.getHeader("Accept")).isEqualTo("application/json");
-    assertThat(forwarded.getHeader("X-Authenticated-User")).isEqualTo("101");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Type")).isEqualTo("USER");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Id")).isEqualTo("101");
     assertThat(forwarded.getHeader("X-Request-Id"))
         .isEqualTo(response.getHeaders().getFirst("X-Request-Id"));
 
@@ -115,7 +123,8 @@ class GatewayIntegrationTests {
     assertThat(output.getOut()).contains("event=request_completed requestId=" + requestId);
     assertThat(output.getOut()).contains("route=League-Service");
     assertThat(output.getOut()).contains("authResult=valid");
-    assertThat(output.getOut()).contains("authenticatedUser=101");
+    assertThat(output.getOut()).contains("authenticatedPrincipalType=USER");
+    assertThat(output.getOut()).contains("authenticatedPrincipalId=101");
     assertThat(output.getOut()).contains("rateLimitResult=allowed");
     assertThat(output.getOut()).contains("downstreamUrl=League-Service/42");
     assertThat(output.getOut()).contains("downstreamStatus=200");
@@ -135,7 +144,8 @@ class GatewayIntegrationTests {
     RecordedRequest forwarded = takeDownstreamRequest();
     assertThat(forwarded.getPath()).isEqualTo("/public/ping?source=test");
     assertThat(forwarded.getHeader("Authorization")).isNull();
-    assertThat(forwarded.getHeader("X-Authenticated-User")).isNull();
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Type")).isNull();
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Id")).isNull();
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo("{\"ok\":true}");
   }
@@ -163,6 +173,70 @@ class GatewayIntegrationTests {
     assertThat(response.getBody()).contains("\"error\":\"Invalid or expired token\"");
     assertThat(response.getBody()).contains("\"status\":401");
     assertThat(noDownstreamRequest()).isTrue();
+  }
+
+  @Test
+  void schedulerRouteWithoutTokenReturns401AndDoesNotForward() throws Exception {
+    ResponseEntity<String> response = get("/api/v1/jobs");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    assertThat(response.getBody())
+        .contains("\"error\":\"Missing Authorization header or invalid format\"");
+    assertThat(noDownstreamRequest()).isTrue();
+  }
+
+  @Test
+  void schedulerRouteForwardsUserPrincipalHeaders() throws Exception {
+    DOWNSTREAM.enqueue(new MockResponse().setResponseCode(200).setBody("{\"ok\":true}"));
+
+    HttpHeaders headers = bearerHeaders(validToken(201L, Instant.now().plusSeconds(300)));
+    ResponseEntity<String> response = exchange("/api/v1/jobs", headers);
+
+    RecordedRequest forwarded = takeDownstreamRequest();
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(forwarded.getPath()).isEqualTo("/jobs");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Type")).isEqualTo("USER");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Id")).isEqualTo("201");
+    assertThat(forwarded.getHeader("X-Gateway-Internal-Token")).isEqualTo(INTERNAL_TOKEN);
+  }
+
+  @Test
+  void schedulerRouteForwardsServicePrincipalHeaders() throws Exception {
+    DOWNSTREAM.enqueue(new MockResponse().setResponseCode(200).setBody("{\"ok\":true}"));
+
+    HttpHeaders headers = bearerHeaders(validServiceToken(301L, Instant.now().plusSeconds(300)));
+    ResponseEntity<String> response = exchange("/api/v1/jobs", headers);
+
+    RecordedRequest forwarded = takeDownstreamRequest();
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Type")).isEqualTo("SERVICE");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Id")).isEqualTo("301");
+    assertThat(forwarded.getHeader("X-Gateway-Internal-Token")).isEqualTo(INTERNAL_TOKEN);
+  }
+
+  @Test
+  void forgedGatewayInternalTokenIsOverwrittenForSchedulerRoute() throws Exception {
+    DOWNSTREAM.enqueue(new MockResponse().setResponseCode(200).setBody("{\"ok\":true}"));
+
+    HttpHeaders headers = bearerHeaders(validToken(202L, Instant.now().plusSeconds(300)));
+    headers.add("X-Gateway-Internal-Token", "forged");
+    ResponseEntity<String> response = exchange("/api/v1/jobs", headers);
+
+    RecordedRequest forwarded = takeDownstreamRequest();
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(forwarded.getHeader("X-Gateway-Internal-Token")).isEqualTo(INTERNAL_TOKEN);
+  }
+
+  @Test
+  void schedulerRouteForwardsAdminClaim() throws Exception {
+    DOWNSTREAM.enqueue(new MockResponse().setResponseCode(200).setBody("{\"ok\":true}"));
+
+    HttpHeaders headers = bearerHeaders(validToken(203L, true, Instant.now().plusSeconds(300)));
+    ResponseEntity<String> response = exchange("/api/v1/jobs", headers);
+
+    RecordedRequest forwarded = takeDownstreamRequest();
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(forwarded.getHeader("X-Authenticated-Is-Admin")).isEqualTo("true");
   }
 
   @Test
@@ -198,6 +272,24 @@ class GatewayIntegrationTests {
   }
 
   @Test
+  void partialSchedulerPrefixReturns404AndDoesNotForward() throws Exception {
+    ResponseEntity<String> response = get("/api/v1/jobsXYZ");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    assertThat(response.getBody())
+        .contains("\"error\":\"No route found for path: /api/v1/jobsXYZ\"");
+    assertThat(noDownstreamRequest()).isTrue();
+  }
+
+  @Test
+  void healthBypassesGatewayRoutes() {
+    ResponseEntity<String> response = get("/health");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo("{\"status\":\"UP\"}");
+  }
+
+  @Test
   void unavailableDownstreamReturns502() throws Exception {
     HttpHeaders headers = bearerHeaders(validToken(104L, Instant.now().plusSeconds(300)));
     ResponseEntity<String> response = exchange("/api/v1/down/service", headers);
@@ -221,26 +313,31 @@ class GatewayIntegrationTests {
   }
 
   @Test
-  void authenticatedUserHeaderIsPropagatedToDownstream() throws Exception {
+  void authenticatedPrincipalHeadersArePropagatedToDownstream() throws Exception {
     DOWNSTREAM.enqueue(new MockResponse().setResponseCode(200).setBody("{\"ok\":true}"));
 
     HttpHeaders headers = bearerHeaders(validToken(105L, Instant.now().plusSeconds(300)));
     exchange("/api/v1/leagues/user-header", headers);
 
     RecordedRequest forwarded = takeDownstreamRequest();
-    assertThat(forwarded.getHeader("X-Authenticated-User")).isEqualTo("105");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Type")).isEqualTo("USER");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Id")).isEqualTo("105");
   }
 
   @Test
-  void forgedAuthenticatedUserHeaderIsOverwrittenByJwtIdentity() throws Exception {
+  void forgedAuthenticatedPrincipalHeadersAreOverwrittenByJwtIdentity() throws Exception {
     DOWNSTREAM.enqueue(new MockResponse().setResponseCode(200).setBody("{\"ok\":true}"));
 
     HttpHeaders headers = bearerHeaders(validToken(106L, Instant.now().plusSeconds(300)));
-    headers.add("X-Authenticated-User", "999999");
+    headers.add("X-Authenticated-Principal-Type", "SERVICE");
+    headers.add("X-Authenticated-Principal-Id", "999999");
+    headers.add("X-Authenticated-Is-Admin", "true");
     exchange("/api/v1/leagues/forged-user", headers);
 
     RecordedRequest forwarded = takeDownstreamRequest();
-    assertThat(forwarded.getHeader("X-Authenticated-User")).isEqualTo("106");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Type")).isEqualTo("USER");
+    assertThat(forwarded.getHeader("X-Authenticated-Principal-Id")).isEqualTo("106");
+    assertThat(forwarded.getHeader("X-Authenticated-Is-Admin")).isEqualTo("false");
   }
 
   private static void startDownstream() {
@@ -291,9 +388,23 @@ class GatewayIntegrationTests {
   }
 
   private String validToken(Long userId, Instant expiration) {
+    return validToken(userId, false, expiration);
+  }
+
+  private String validToken(Long userId, boolean admin, Instant expiration) {
     return Jwts.builder()
         .issuer(ISSUER)
         .claim("userId", userId)
+        .claim("admin", admin)
+        .expiration(Date.from(expiration))
+        .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
+        .compact();
+  }
+
+  private String validServiceToken(Long serviceId, Instant expiration) {
+    return Jwts.builder()
+        .issuer(ISSUER)
+        .claim("serviceId", serviceId)
         .expiration(Date.from(expiration))
         .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
         .compact();

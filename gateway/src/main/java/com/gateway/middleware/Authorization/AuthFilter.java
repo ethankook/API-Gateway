@@ -1,7 +1,8 @@
 package com.gateway.middleware.Authorization;
 
+import com.common.helper.FilterErrorResponseWriter;
 import com.gateway.config.FilterOrder;
-import com.gateway.middleware.FilterErrorResponseWriter;
+import com.gateway.config.GatewayFilterExclusions;
 import com.gateway.middleware.RouteMatching.Route;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -22,11 +23,16 @@ public class AuthFilter extends OncePerRequestFilter {
   private final JwtService jwtService;
 
   @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    return GatewayFilterExclusions.shouldBypassRouteFilters(request);
+  }
+
+  @Override
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws ServletException, IOException {
     Route route = (Route) request.getAttribute("matchedRoute");
-    if (route.getRequiresAuth() != true) {
+    if (!Boolean.TRUE.equals(route.getRequiresAuth())) {
       request.setAttribute("authResult", "skipped");
       filterChain.doFilter(request, response);
       return;
@@ -47,15 +53,19 @@ public class AuthFilter extends OncePerRequestFilter {
     String token = authHeader.substring("Bearer ".length());
     try {
       Claims claims = jwtService.validate(token);
-      Long userId = claims.get("userId", Long.class);
-      if (userId == null) {
+      Long userId = claimAsLong(claims, "userId");
+      Long serviceId = claimAsLong(claims, "serviceId");
+      Boolean admin = claims.get("admin", Boolean.class);
+      if ((userId == null && serviceId == null) || (userId != null && serviceId != null)) {
         request.setAttribute("authResult", "invalid");
         FilterErrorResponseWriter.writeError(
             response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid token", request);
         return;
       }
       request.setAttribute("authResult", "valid");
-      request.setAttribute("X-Authenticated-User", userId);
+      request.setAttribute("X-Authenticated-Principal-Type", userId != null ? "USER" : "SERVICE");
+      request.setAttribute("X-Authenticated-Principal-Id", userId != null ? userId : serviceId);
+      request.setAttribute("X-Authenticated-Is-Admin", Boolean.TRUE.equals(admin));
       filterChain.doFilter(request, response);
 
     } catch (JwtException | IllegalArgumentException e) {
@@ -63,5 +73,16 @@ public class AuthFilter extends OncePerRequestFilter {
       FilterErrorResponseWriter.writeError(
           response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid or expired token", request);
     }
+  }
+
+  private Long claimAsLong(Claims claims, String claimName) {
+    Object value = claims.get(claimName);
+    if (value == null) {
+      return null;
+    }
+    if (value instanceof Number number) {
+      return number.longValue();
+    }
+    throw new IllegalArgumentException("Invalid principal claim type");
   }
 }

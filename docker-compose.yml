@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: orchard-scheduler-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-orchard}
+      POSTGRES_USER: ${DB_USER:-localuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+    ports:
+      - "${DB_PORT:-4432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/db/init:/docker-entrypoint-initdb.d:ro
+    env_file: .env
+
+
+volumes:
+  postgres-data:

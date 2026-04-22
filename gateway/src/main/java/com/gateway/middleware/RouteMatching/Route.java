@@ -11,6 +11,7 @@ public class Route {
   String pathPrefix;
   String downstreamUrl;
   Boolean requiresAuth;
+  Boolean requiresInternalToken;
   Long rateLimitCapacity;
   Long rateLimitRefillRate;
   List<String> methods;

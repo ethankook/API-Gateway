@@ -6,7 +6,11 @@ import org.springframework.test.context.TestPropertySource;
 
 @SpringBootTest
 @TestPropertySource(
-    properties = {"auth.jwt.secret=01234567890123456789012345678901", "auth.jwt.issuer=Orchard"})
+    properties = {
+      "auth.jwt.secret=01234567890123456789012345678901",
+      "auth.jwt.issuer=Orchard",
+      "gateway.internal-token=test-internal-token"
+    })
 class GatewayApplicationTests {
 
   @Test

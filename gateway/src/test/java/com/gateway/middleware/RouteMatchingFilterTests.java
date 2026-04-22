@@ -85,4 +85,20 @@ public class RouteMatchingFilterTests {
 
     assertThat(response.getStatus()).isEqualTo(405);
   }
+
+  @Test
+  void bypassesHealthPath() throws Exception {
+    GatewayProperties properties = new GatewayProperties();
+    properties.setRoutes(new Route[0]);
+
+    RouteMatchingFilter filter = new RouteMatchingFilter(new RouteResolver(properties));
+    MockHttpServletRequest request = new MockHttpServletRequest("GET", "/health");
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    FilterChain chain = mock(FilterChain.class);
+
+    filter.doFilter(request, response, chain);
+
+    verify(chain).doFilter(request, response);
+    assertThat(response.getStatus()).isEqualTo(200);
+  }
 }

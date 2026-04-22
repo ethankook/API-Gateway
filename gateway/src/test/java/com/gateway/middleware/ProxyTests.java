@@ -71,6 +71,7 @@ class ProxyTests {
             .setResponseCode(200)
             .addHeader("Content-Type", "application/json")
             .addHeader("X-Downstream", "league-service")
+            .addHeader("Connection", "close")
             .setBody("{\"leagueId\":42}"));
 
     MockHttpServletRequest request = matchedRequest("GET", "/api/v1/leagues/42");
@@ -90,6 +91,8 @@ class ProxyTests {
 
     assertThat(response.getStatus()).isEqualTo(200);
     assertThat(response.getHeader("X-Downstream")).isEqualTo("league-service");
+    assertThat(response.getHeader("Connection")).isNull();
+    assertThat(response.getHeader("Content-Length")).isNull();
     assertThat(response.getContentAsString()).isEqualTo("{\"leagueId\":42}");
 
     String requestId = response.getHeader("X-Request-Id");

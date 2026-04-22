@@ -1,8 +1,9 @@
 package com.gateway.middleware.RateLimiting;
 
+import com.common.helper.FilterErrorResponseWriter;
 import com.gateway.config.FilterOrder;
-import com.gateway.middleware.FilterErrorResponseWriter;
-import com.gateway.middleware.RateLimiting.entities.RateLimitResult;
+import com.gateway.config.GatewayFilterExclusions;
+import com.gateway.middleware.RateLimiting.entity.RateLimitResult;
 import com.gateway.middleware.RouteMatching.Route;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -22,6 +23,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
   private final RateLimiter rateLimiter;
 
   @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    return GatewayFilterExclusions.shouldBypassRouteFilters(request);
+  }
+
+  @Override
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws ServletException, IOException {
@@ -29,13 +35,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
     Route route = (Route) request.getAttribute("matchedRoute");
     String key;
 
-    if (!route.getRequiresAuth()) {
+    if (!Boolean.TRUE.equals(route.getRequiresAuth())) {
       String ip = request.getRemoteAddr();
       key = ip + "-" + route.getRouteId();
 
     } else {
-      Long userId = (Long) request.getAttribute("X-Authenticated-User");
-      key = userId.toString() + "-" + route.getRouteId();
+      String principalType = String.valueOf(request.getAttribute("X-Authenticated-Principal-Type"));
+      Long principalId = (Long) request.getAttribute("X-Authenticated-Principal-Id");
+      key = principalType + ":" + principalId + "-" + route.getRouteId();
     }
 
     RateLimitResult result = rateLimiter.isAllowed(key, route);
