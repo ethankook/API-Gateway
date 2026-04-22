@@ -16,6 +16,7 @@ import com.scheduler.enums.JobStatus;
 import com.scheduler.enums.JobType;
 import com.scheduler.enums.PrincipalType;
 import com.scheduler.repository.JobRepository;
+import com.scheduler.repository.JobRunRepository;
 import com.scheduler.service.JobService;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -39,6 +40,8 @@ class JobServiceTests {
 
   @Mock private JobRepository jobRepository;
 
+  @Mock private JobRunRepository jobRunRepository;
+
   @InjectMocks private JobService jobService;
 
   private static final Validator VALIDATOR =
@@ -49,9 +52,21 @@ class JobServiceTests {
         new InvalidCreateJobCase("blank name", request -> withName(request, ""), "name"),
         new InvalidCreateJobCase("null type", request -> withType(request, null), "type"),
         new InvalidCreateJobCase(
+            "one-time job without fireAt",
+            request -> withFireAt(request, null),
+            "fireAtValidForType"),
+        new InvalidCreateJobCase(
             "invalid cron expression",
-            request -> withCronExpression(request, "not cron"),
+            request -> withType(withCronExpression(request, "not cron"), JobType.RECURRING),
             "cronExpression"),
+        new InvalidCreateJobCase(
+            "recurring job without cron expression",
+            request -> withType(request, JobType.RECURRING),
+            "cronExpressionPresentForRecurringJobs"),
+        new InvalidCreateJobCase(
+            "one-time job with cron expression",
+            request -> withCronExpression(request, "0 0 * * * *"),
+            "cronExpressionAbsentForOneTimeJobs"),
         new InvalidCreateJobCase(
             "blank target URL", request -> withTargetUrl(request, ""), "targetUrl"),
         new InvalidCreateJobCase(
@@ -153,7 +168,7 @@ class JobServiceTests {
         new CreateJobRequest(
             "Daily job",
             JobType.ONE_TIME,
-            "0 0 * * * *",
+            null,
             fireAt,
             "https://example.com/webhook",
             HttpMethod.POST,
@@ -176,7 +191,7 @@ class JobServiceTests {
     Job savedJob = jobCaptor.getValue();
     assertThat(savedJob.getName()).isEqualTo("Daily job");
     assertThat(savedJob.getType()).isEqualTo(JobType.ONE_TIME);
-    assertThat(savedJob.getCronExpression()).isEqualTo("0 0 * * * *");
+    assertThat(savedJob.getCronExpression()).isNull();
     assertThat(savedJob.getNextFireTime()).isEqualTo(fireAt);
     assertThat(savedJob.getStatus()).isEqualTo(JobStatus.PENDING);
     assertThat(savedJob.getTargetUrl()).isEqualTo("https://example.com/webhook");
@@ -212,6 +227,52 @@ class JobServiceTests {
     ArgumentCaptor<Job> jobCaptor = ArgumentCaptor.forClass(Job.class);
     verify(jobRepository).save(jobCaptor.capture());
     assertThat(jobCaptor.getValue().getPayload()).isNull();
+  }
+
+  @Test
+  void createJob_shouldUseProvidedFireAtForFirstRecurringRun() {
+    Instant fireAt = Instant.now().plusSeconds(3600);
+    CreateJobRequest request =
+        new CreateJobRequest(
+            "Recurring job",
+            JobType.RECURRING,
+            "0 0 * * * *",
+            fireAt,
+            "https://example.com/webhook",
+            HttpMethod.POST,
+            null,
+            3,
+            60);
+    when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+    jobService.createJob(request, PrincipalType.USER, 1L);
+
+    ArgumentCaptor<Job> jobCaptor = ArgumentCaptor.forClass(Job.class);
+    verify(jobRepository).save(jobCaptor.capture());
+    assertThat(jobCaptor.getValue().getCronExpression()).isEqualTo("0 0 * * * *");
+    assertThat(jobCaptor.getValue().getNextFireTime()).isEqualTo(fireAt);
+  }
+
+  @Test
+  void createJob_shouldComputeInitialRecurringFireTimeWhenFireAtMissing() {
+    CreateJobRequest request =
+        new CreateJobRequest(
+            "Recurring job",
+            JobType.RECURRING,
+            "0 0 * * * *",
+            null,
+            "https://example.com/webhook",
+            HttpMethod.POST,
+            null,
+            3,
+            60);
+    when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+    jobService.createJob(request, PrincipalType.USER, 1L);
+
+    ArgumentCaptor<Job> jobCaptor = ArgumentCaptor.forClass(Job.class);
+    verify(jobRepository).save(jobCaptor.capture());
+    assertThat(jobCaptor.getValue().getNextFireTime()).isAfter(Instant.now());
   }
 
   @Test
@@ -284,6 +345,19 @@ class JobServiceTests {
         type,
         request.cronExpression(),
         request.fireAt(),
+        request.targetUrl(),
+        request.httpMethod(),
+        request.payload(),
+        request.maxAttempts(),
+        request.retryBackoffSeconds());
+  }
+
+  private static CreateJobRequest withFireAt(CreateJobRequest request, Instant fireAt) {
+    return new CreateJobRequest(
+        request.name(),
+        request.type(),
+        request.cronExpression(),
+        fireAt,
         request.targetUrl(),
         request.httpMethod(),
         request.payload(),

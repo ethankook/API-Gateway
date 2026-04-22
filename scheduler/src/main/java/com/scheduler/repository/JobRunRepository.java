@@ -8,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface JobRunRepository extends JpaRepository<JobRun, UUID> {
 
   List<JobRun> findAllByJob_Id(UUID jobId);
+
+  List<JobRun> findAllByJob_IdOrderByStartedAtAsc(UUID jobId);
 }

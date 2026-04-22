@@ -1,6 +1,8 @@
 package com.scheduler.repository;
 
 import com.scheduler.entity.Job;
+import com.scheduler.enums.JobStatus;
+import com.scheduler.enums.PrincipalType;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -25,4 +27,17 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
 
   @Query("SELECT j FROM Job j WHERE j.status = 'RUNNING' AND j.updatedAt < :threshold")
   List<Job> findStuckJobs(@Param("threshold") Instant threshold);
+
+  @Query(
+      """
+      SELECT j FROM Job j
+      WHERE (:ownerType IS NULL OR j.ownerType = :ownerType)
+        AND (:ownerId IS NULL OR j.ownerId = :ownerId)
+        AND (:status IS NULL OR j.status = :status)
+      ORDER BY j.createdAt DESC
+      """)
+  List<Job> findJobs(
+      @Param("ownerType") PrincipalType ownerType,
+      @Param("ownerId") Long ownerId,
+      @Param("status") JobStatus status);
 }

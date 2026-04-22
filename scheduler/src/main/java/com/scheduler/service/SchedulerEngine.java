@@ -60,6 +60,7 @@ public class SchedulerEngine {
         executorPool.execute(() -> jobExecutor.execute(job));
       } catch (RejectedExecutionException e) {
         log.warn("Executor pool full, could not dispatch job {}", job.getId());
+        jobService.resetRejectedDispatch(job);
       }
     }
   }

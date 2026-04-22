@@ -71,6 +71,7 @@ class SchedulerEngineTests {
         .execute(any(Runnable.class));
 
     assertThatCode(() -> schedulerEngine.poll()).doesNotThrowAnyException();
+    verify(jobService).resetRejectedDispatch(job1);
   }
 
   @Test

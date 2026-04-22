@@ -2,15 +2,25 @@ package com.scheduler.controller;
 
 import com.scheduler.dto.request.CreateJobRequest;
 import com.scheduler.dto.response.CreateJobResponse;
+import com.scheduler.dto.response.JobResponse;
+import com.scheduler.dto.response.JobRunResponse;
+import com.scheduler.enums.JobStatus;
 import com.scheduler.enums.PrincipalType;
 import com.scheduler.service.JobService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -27,6 +37,31 @@ public class JobController {
         (PrincipalType) httpServletRequest.getAttribute("X-Authenticated-Principal-Type");
     Long ownerId = (Long) httpServletRequest.getAttribute("X-Authenticated-Principal-Id");
 
-    return ResponseEntity.ok(jobService.createJob(request, ownerType, ownerId));
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(jobService.createJob(request, ownerType, ownerId));
+  }
+
+  @GetMapping("/{id}")
+  public ResponseEntity<JobResponse> getJob(@PathVariable UUID id) {
+    return ResponseEntity.ok(jobService.getJob(id));
+  }
+
+  @GetMapping("/{id}/runs")
+  public ResponseEntity<List<JobRunResponse>> getJobRuns(@PathVariable UUID id) {
+    return ResponseEntity.ok(jobService.getJobRuns(id));
+  }
+
+  @DeleteMapping("/{id}")
+  public ResponseEntity<Void> deleteJob(@PathVariable UUID id) {
+    jobService.deleteJob(id);
+    return ResponseEntity.noContent().build();
+  }
+
+  @GetMapping
+  public ResponseEntity<List<JobResponse>> listJobs(
+      @RequestParam(required = false) PrincipalType ownerType,
+      @RequestParam(required = false) Long ownerId,
+      @RequestParam(required = false) JobStatus status) {
+    return ResponseEntity.ok(jobService.listJobs(ownerType, ownerId, status));
   }
 }
